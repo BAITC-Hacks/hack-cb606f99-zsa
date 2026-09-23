@@ -28,7 +28,7 @@
   font-size: 40px;
   line-height: 1;
   font-weight: var(--weight-title);
-  letter-spacing: -0.035em;
+  letter-spacing: 0;
 }
 
 .score :global(.score-ring) span {

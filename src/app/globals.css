@@ -701,6 +701,7 @@ fieldset {
   --score: 0%;
   width: 128px;
   height: 128px;
+  flex-shrink: 0;
   padding: 4px;
   border-radius: 50%;
   background: conic-gradient(from -90deg, var(--progress-fill) var(--score), var(--progress-track) 0);
@@ -710,26 +711,31 @@ fieldset {
   transition: background 0.5s;
 }
 .score-ring > div {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
   width: 100%;
   height: 100%;
   background: var(--bg-surface);
   border: 5px solid var(--bg-surface);
   box-shadow: var(--shadow-inset);
   border-radius: 50%;
-  align-items: center;
-  justify-content: center;
+  justify-items: center;
+  text-align: center;
 }
 .score-ring strong {
+  grid-row: 2;
+  display: block;
   font-size: 42px;
   line-height: 1;
   font-weight: 500;
-  letter-spacing: -0.065em;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
 .score-ring span {
+  grid-row: 3;
+  align-self: start;
   font-size: 10px;
+  line-height: 14px;
   color: var(--text-tertiary);
   margin-top: 6px;
 }
@@ -1984,6 +1990,7 @@ input[type="checkbox"] {
   top: 104px;
 }
 .score-panel .eyebrow {
+  text-align: center;
   font-size: 9px;
   letter-spacing: 0.06em;
 }
