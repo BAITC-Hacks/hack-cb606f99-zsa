@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
-import { taskService } from "@/lib/client/service";
+import { taskService, ApiClientError } from "@/lib/client/service";
 import { useResource } from "@/lib/client/use-resource";
 import {
   FIELD_LABELS,
@@ -16,6 +16,8 @@ import {
   TaskArtwork,
   LoadingState,
   ErrorNotice,
+  EmptyState,
+  getTaskTitle,
 } from "./ui";
 
 export function TaskDetails({ id }: { id: string }) {
@@ -80,7 +82,7 @@ export function TaskDetails({ id }: { id: string }) {
             </span>
             <Badge score={task.score} />
           </div>
-          <h1>{task.title}</h1>
+          <h1>{getTaskTitle(task)}</h1>
           <div className="detail-meta">
             <span>
               <Icon name="users" size={16} />
@@ -97,7 +99,7 @@ export function TaskDetails({ id }: { id: string }) {
         </div>
         <button
           className="btn btn-blue"
-          disabled={!published}
+          disabled={!published || teams.length === 0}
           onClick={() => {
             proposalForm.current?.scrollIntoView({
               behavior: "smooth",
@@ -176,6 +178,15 @@ export function TaskDetails({ id }: { id: string }) {
                   Отправить ещё одно предложение
                 </button>
               </div>
+            ) : teams.length === 0 ? (
+              <EmptyState
+                title="Команды пока не добавлены"
+                description="Для отправки предложения нужен профиль команды. Обновите список после его добавления."
+              >
+                <button type="button" className="btn btn-secondary" onClick={retry}>
+                  Обновить список команд
+                </button>
+              </EmptyState>
             ) : (
               <form
                 onSubmit={async (event) => {
@@ -193,6 +204,8 @@ export function TaskDetails({ id }: { id: string }) {
                     retry();
                   } catch (err) {
                     setSubmitError(errorMessage(err));
+                    if (err instanceof ApiClientError &&
+                      ["TASK_ARCHIVED", "TASK_NOT_PUBLISHED"].includes(err.code)) retry();
                   } finally {
                     setBusy(false);
                     guard.current = false;

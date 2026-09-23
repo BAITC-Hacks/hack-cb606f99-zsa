@@ -176,14 +176,17 @@ export const mockService: TaskService = {
       },
     };
   },
-  async saveTask({ fields, confirmedFields }, id) {
+  async saveTask({ fields, confirmedFields, expectedVersion }, id) {
     await delay();
-    if (!fields.title.trim() || fields.initialDescription.trim().length < 10)
+    if (fields.initialDescription.trim().length < 10)
       throw new Error(
-        "Укажите название и описание задачи (минимум 10 символов).",
+        "Укажите описание задачи (минимум 10 символов).",
       );
     const db = read();
     const previous = id ? findTask(db, id) : undefined;
+    if (previous?.status === "archived") throw new Error("Задача в архиве и доступна только для чтения.");
+    if (previous && expectedVersion !== undefined && previous.version !== expectedVersion)
+      throw new Error("Карточка изменилась. Загрузите актуальную версию.");
     const cleaned = Object.fromEntries(
       Object.entries(fieldsOnly(fields)).map(([key, value]) => [
         key,
@@ -209,15 +212,32 @@ export const mockService: TaskService = {
     write(db);
     return task;
   },
-  async publishTask(id) {
+  async publishTask(id, expectedVersion) {
     await delay();
     const db = read();
     const task = findTask(db, id);
+    if (task.status === "archived") throw new Error("Задача в архиве и доступна только для чтения.");
+    if (expectedVersion !== undefined && task.version !== expectedVersion)
+      throw new Error("Карточка изменилась. Загрузите актуальную версию.");
     if (!task.title || !task.confirmedFields.includes("title"))
       throw new Error("Заполните и подтвердите название перед публикацией.");
+    if (task.status === "published") return task;
     task.status = "published";
     task.updatedAt = timestamp();
     task.publishedAt ??= timestamp();
+    task.version += 1;
+    write(db);
+    return task;
+  },
+  async archiveTask(id, expectedVersion) {
+    await delay();
+    const db = read();
+    const task = findTask(db, id);
+    if (expectedVersion !== undefined && task.version !== expectedVersion)
+      throw new Error("Карточка изменилась. Загрузите актуальную версию.");
+    if (task.status === "archived") return task;
+    task.status = "archived";
+    task.updatedAt = timestamp();
     task.version += 1;
     write(db);
     return task;
@@ -258,11 +278,14 @@ export const mockService: TaskService = {
     write(db);
     return proposal;
   },
-  async decideProposal(id, status) {
+  async decideProposal(id, status, decisionComment = "") {
     await delay();
     const db = read();
     const proposal = findProposal(db, id);
+    if (findTask(db, proposal.taskId).status !== "published")
+      throw new Error("Решения доступны только для опубликованной задачи.");
     proposal.status = status;
+    proposal.decisionComment = decisionComment.trim();
     proposal.updatedAt = timestamp();
     proposal.decidedAt = timestamp();
     write(db);

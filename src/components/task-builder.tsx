@@ -11,6 +11,13 @@ import { taskService, IS_DEMO, ApiClientError } from "@/lib/client/service";
 import { useResource } from "@/lib/client/use-resource";
 import { builderDraftReducer, manualCardFromDraft } from "@/lib/client/builder-draft";
 import {
+  canSaveDraft,
+  descriptionMinLength,
+  fieldMaxLength,
+  publishSavedCard,
+  validBuilderDescription,
+} from "@/lib/client/builder-workflow";
+import {
   EMPTY_FIELDS,
   FIELD_LABELS,
   INDUSTRIES,
@@ -185,10 +192,9 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
     "businessContact",
     "interactionFormat",
   ];
-  const canSave =
-    !conflict &&
-    fields.title.trim() &&
-    fields.initialDescription.trim().length >= 10;
+  const canSave = !conflict && canSaveDraft(fields);
+  const canPublish = canSave && !!fields.title.trim() && confirmed.includes("title");
+  const validDescription = validBuilderDescription(description);
   const steps = ["Ваша идея", "Уточнения", "Карточка задачи"];
   return (
     <main id="main-content" className="container page-content builder-page">
@@ -294,13 +300,13 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                   value={description}
                   onChange={(event) => updateSource({ description: event.target.value })}
                   placeholder="Например: у нас кофейня. По утрам длинные очереди, хотим сократить время ожидания…"
-                  minLength={10}
-                  maxLength={4000}
+                  minLength={descriptionMinLength}
+                  maxLength={fieldMaxLength("initialDescription")}
                   required
                 />
                 <div className="input-hint">
                   <span>Что происходит сейчас и что хотелось бы изменить?</span>
-                  <span>{description.length} / 4000</span>
+                  <span>{description.length} / {fieldMaxLength("initialDescription")}</span>
                 </div>
                 <label className="field-label" htmlFor="industry">
                   Отрасль
@@ -339,7 +345,7 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                   </span>
                   <button
                     className="btn btn-blue"
-                    disabled={!!busy || description.trim().length < 10}
+                    disabled={!!busy || !validDescription}
                   >
                     {busy ? (
                       <>
@@ -356,7 +362,7 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                 <button
                   type="button"
                   className="text-link muted manual-entry"
-                  disabled={!!busy || description.trim().length < 10}
+                  disabled={!!busy || !validDescription}
                   onClick={enterManualMode}
                 >
                   Заполнить карточку вручную <Icon name="arrow" size={14} />
@@ -413,16 +419,7 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                       <p>{question.reason}</p>
                       <textarea
                         id={`question-${question.id}`}
-                        maxLength={
-                          [
-                            "title",
-                            "industry",
-                            "topic",
-                            "businessContact",
-                          ].includes(question.field)
-                            ? 200
-                            : 3000
-                        }
+                        maxLength={fieldMaxLength(question.field)}
                         rows={3}
                         value={answers[question.field] ?? ""}
                         onChange={(event) =>
@@ -482,7 +479,7 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                 <label>
                   Название задачи
                   <input
-                    maxLength={180}
+                    maxLength={fieldMaxLength("title")}
                     value={fields.title}
                     onChange={(event) =>
                       updateField("title", event.target.value)
@@ -526,7 +523,7 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                   <label>
                     Тема
                     <input
-                      maxLength={80}
+                      maxLength={fieldMaxLength("topic")}
                       value={fields.topic}
                       onChange={(event) =>
                         updateField("topic", event.target.value)
@@ -572,7 +569,7 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                     <textarea
                       id={`field-${key}`}
                       rows={key === "businessContact" ? 2 : 3}
-                      maxLength={key === "businessContact" ? 200 : 3000}
+                      maxLength={fieldMaxLength(key)}
                       value={fields[key]}
                       onChange={(event) => updateField(key, event.target.value)}
                       placeholder="Можно дополнить сейчас или вернуться позже"
@@ -644,16 +641,15 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                     className="btn btn-blue"
                     disabled={
                       !!busy ||
-                      !canSave ||
-                      !publishConsent ||
-                      !confirmed.includes("title")
+                      !canPublish ||
+                      !publishConsent
                     }
                     onClick={() =>
                       void perform("Публикуем…", async () => {
                         const result = await save();
                         let publishedTask: TaskCard;
                         try {
-                          publishedTask = await taskService.publishTask(result.id, result.version);
+                          publishedTask = await publishSavedCard(result, taskService.publishTask);
                         } catch (error) {
                           // Creation already succeeded. Even a failed publish must leave a reloadable URL.
                           if (!initialTask) {

@@ -49,6 +49,8 @@ beforeEach(() => {
               : platform.listTasks(query);
           if (parts[3] === "publish")
             return platform.publishTask(parts[2], body);
+          if (parts[3] === "archive")
+            return platform.archiveTask(parts[2], body);
           if (parts[3] === "proposals")
             return method === "POST"
               ? platform.createProposal(parts[2], body)
@@ -65,6 +67,45 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("frontend to backend integration", () => {
+  it("archives with the latest version, keeps history and rejects further mutations", async () => {
+    const task = await httpService.getTask("task-1");
+    const history = await httpService.listProposals(task.id);
+    const revised = await httpService.saveTask({
+      fields: { ...emptyTaskFields(task.initialDescription), title: "Изменённая задача" },
+      confirmedFields: ["title"],
+      expectedVersion: task.version,
+    }, task.id);
+    await expect(httpService.archiveTask(task.id, task.version)).rejects.toMatchObject({ code: "VERSION_CONFLICT" });
+    expect((await httpService.getTask(task.id)).status).toBe("published");
+
+    const archived = await httpService.archiveTask(task.id, revised.version);
+    expect(archived.status).toBe("archived");
+    expect(archived.version).toBe(revised.version + 1);
+    expect((await httpService.listTasks()).some((item) => item.id === task.id)).toBe(false);
+    expect((await httpService.listTasks(true)).some((item) => item.id === task.id)).toBe(true);
+    expect(await httpService.listProposals(task.id)).toEqual(history);
+    await expect(httpService.decideProposal(history[0].id, "accepted", history[0].decisionComment)).rejects.toMatchObject({ code: "TASK_NOT_PUBLISHED" });
+    await expect(httpService.publishTask(task.id, archived.version)).rejects.toMatchObject({ code: "TASK_ARCHIVED" });
+    expect((await httpService.archiveTask(task.id, archived.version)).version).toBe(archived.version);
+  });
+
+  it("preserves the business comment when changing a proposal decision", async () => {
+    const [proposal] = await httpService.listProposals("task-1");
+    const accepted = await httpService.decideProposal(proposal.id, "accepted", "Обсудим прототип в пятницу");
+    const rejected = await httpService.decideProposal(proposal.id, "rejected", accepted.decisionComment);
+    expect(rejected.decisionComment).toBe("Обсудим прототип в пятницу");
+    expect((await httpService.listProposals("task-1")).find((item) => item.id === proposal.id)?.decisionComment).toBe(accepted.decisionComment);
+  });
+
+  it("saves an unnamed draft while leaving publication to explicit title confirmation", async () => {
+    const task = await httpService.saveTask({ fields: emptyTaskFields("Нужна система учёта поступающих заказов"), confirmedFields: [] });
+    expect(task.title).toBe("");
+    expect(task.status).toBe("draft");
+    expect(task.score).toBe(0);
+    expect((await httpService.listTasks()).some((item) => item.id === task.id)).toBe(false);
+    await expect(httpService.publishTask(task.id, task.version)).rejects.toBeInstanceOf(ApiClientError);
+  });
+
   it("sends selected industry with analysis and does not ask for it again", async () => {
     const description = "В кофейне большие очереди. Хотим улучшить обслуживание гостей.";
     const withoutFields = await httpService.analyze(description);

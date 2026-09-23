@@ -35,6 +35,21 @@ const proposal = {
   prototypeUrl: "",
 };
 
+it("archives an unnamed draft without losing it from the business workspace", async () => {
+  const task = await resolve(mockService.saveTask({
+    fields: { ...EMPTY_FIELDS, initialDescription: "Нужен учёт заказов мастерской" },
+    confirmedFields: [],
+  }));
+  expect(task.title).toBe("");
+  const archived = await resolve(mockService.archiveTask(task.id, task.version));
+  expect(archived.status).toBe("archived");
+  expect((await resolve(mockService.listTasks(true))).some((item) => item.id === task.id)).toBe(true);
+  expect((await resolve(mockService.listTasks())).some((item) => item.id === task.id)).toBe(false);
+  await expect(resolve(mockService.saveTask({ fields: archived, confirmedFields: [], expectedVersion: archived.version }, archived.id))).rejects.toThrow("архиве");
+  await expect(resolve(mockService.publishTask(archived.id, archived.version))).rejects.toThrow("архиве");
+  expect((await resolve(mockService.archiveTask(task.id, archived.version))).version).toBe(archived.version);
+});
+
 describe("frontend demo flow", () => {
   it("respects known fields during analysis in offline mode", async () => {
     const analysis = await resolve(mockService.analyze(DEMO_DESCRIPTION, {

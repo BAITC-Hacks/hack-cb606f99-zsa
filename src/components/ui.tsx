@@ -281,20 +281,27 @@ export function TaskArtwork({
     </div>
   );
 }
+export function getTaskTitle(task: Pick<TaskCard, "title">) {
+  return task.title.trim() || "Задача без названия";
+}
+
 export function TaskTile({
   task,
   business = false,
+  actions,
 }: {
   task: TaskCard;
   business?: boolean;
+  actions?: ReactNode;
 }) {
+  const taskHref = business && task.status !== "archived"
+    ? `/business/tasks/${task.id}/edit`
+    : `/tasks/${task.id}`;
   return (
     <article className="task-tile">
       <Link
         className="art-link"
-        href={
-          business ? `/business/tasks/${task.id}/edit` : `/tasks/${task.id}`
-        }
+        href={taskHref}
         tabIndex={-1}
         aria-hidden="true"
       >
@@ -310,11 +317,9 @@ export function TaskTile({
         </div>
         <Link
           className="tile-title"
-          href={
-            business ? `/business/tasks/${task.id}/edit` : `/tasks/${task.id}`
-          }
+          href={taskHref}
         >
-          <h2>{task.title}</h2>
+          <h2>{getTaskTitle(task)}</h2>
         </Link>
         <p className="tile-description">
           {task.contextAndNeed || task.initialDescription}
@@ -343,6 +348,7 @@ export function TaskTile({
             </Link>
           </div>
         )}
+        {actions}
       </div>
     </article>
   );

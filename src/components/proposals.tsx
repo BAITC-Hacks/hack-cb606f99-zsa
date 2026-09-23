@@ -1,10 +1,10 @@
 "use client";
 import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
-import { taskService } from "@/lib/client/service";
+import { taskService, ApiClientError } from "@/lib/client/service";
 import { useResource } from "@/lib/client/use-resource";
 import { errorMessage, safeLink } from "@/lib/client/model";
-import { Icon, Badge, LoadingState, ErrorNotice, EmptyState } from "./ui";
+import { Icon, Badge, LoadingState, ErrorNotice, EmptyState, getTaskTitle } from "./ui";
 
 const labels = {
   pending: "На рассмотрении",
@@ -46,6 +46,8 @@ export function Proposals({ id }: { id: string }) {
       setNotice(message);
     } catch (err) {
       setActionError(errorMessage(err));
+      if (err instanceof ApiClientError &&
+        ["TASK_ARCHIVED", "TASK_NOT_PUBLISHED"].includes(err.code)) retry();
     } finally {
       guard.current = false;
       setBusy("");
@@ -87,7 +89,7 @@ export function Proposals({ id }: { id: string }) {
       <div className="proposal-task-bar">
         <div>
           <Icon name="file" />
-          <strong>{task.title}</strong>
+          <strong>{getTaskTitle(task)}</strong>
         </div>
         <Badge score={task.score} />
       </div>
@@ -200,7 +202,7 @@ export function Proposals({ id }: { id: string }) {
                 )}
                 <fieldset
                   className="proposal-actions"
-                  disabled={task.status === "archived"}
+                  disabled={task.status !== "published"}
                 >
                   {proposal.status === "pending" ? (
                     <>
@@ -215,6 +217,7 @@ export function Proposals({ id }: { id: string }) {
                                 taskService.decideProposal(
                                   proposal.id,
                                   "rejected",
+                                  proposal.decisionComment,
                                 ),
                               "Предложение отклонено.",
                             )
@@ -232,6 +235,7 @@ export function Proposals({ id }: { id: string }) {
                                 taskService.decideProposal(
                                   proposal.id,
                                   "accepted",
+                                  proposal.decisionComment,
                                 ),
                               `Команда ${team?.name ?? ""} выбрана`,
                             )
@@ -260,6 +264,7 @@ export function Proposals({ id }: { id: string }) {
                                 proposal.status === "accepted"
                                   ? "rejected"
                                   : "accepted",
+                                proposal.decisionComment,
                               ),
                             proposal.status === "accepted"
                               ? "Предложение отклонено."

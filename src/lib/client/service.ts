@@ -151,13 +151,20 @@ export const httpService: TaskService = {
         input,
       ),
     ).proposal,
-  decideProposal: async (id, status) =>
+  archiveTask: async (id, expectedVersion) =>
+    parseResponse(
+      TaskResponseSchema,
+      await request(`/api/tasks/${encodeURIComponent(id)}/archive`, "POST", {
+        ...(expectedVersion === undefined ? {} : { expectedVersion }),
+      }),
+    ).task,
+  decideProposal: async (id, status, decisionComment) =>
     parseResponse(
       ProposalResponseSchema,
       await request(
         `/api/proposals/${encodeURIComponent(id)}/status`,
         "PATCH",
-        { status },
+        { status, ...(decisionComment === undefined ? {} : { decisionComment }) },
       ),
     ).proposal,
   // No corresponding endpoints exist yet; the UI gates these offline-only features.

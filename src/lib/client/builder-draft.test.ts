@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { builderDraftReducer, manualCardFromDraft, type BuilderDraft } from "./builder-draft";
+import { TaskCardFieldsSchema } from "@/shared/contracts";
 
 const coffee = (): BuilderDraft => ({
   description: "В кофейне большие очереди. Хотим улучшить обслуживание гостей.",
@@ -66,5 +67,14 @@ describe("task builder source revisions and manual fallback", () => {
     expect(fields.title).toBe(coffee().description);
     expect(fields.initialDescription).toBe(coffee().description);
     expect(fields.industry).toBe("Ритейл");
+  });
+
+  it("keeps the full API-length source while fitting derived manual fields", () => {
+    const description = "Описание задачи ".repeat(700).slice(0, 10000).trim();
+    const fields = manualCardFromDraft({ ...coffee(), description, answers: {} });
+    expect(fields.initialDescription).toBe(description);
+    expect(fields.title).toHaveLength(200);
+    expect(fields.contextAndNeed).toHaveLength(5000);
+    expect(TaskCardFieldsSchema.safeParse(fields).success).toBe(true);
   });
 });

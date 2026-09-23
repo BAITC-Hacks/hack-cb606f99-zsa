@@ -1,5 +1,6 @@
 import type { AnalyzeDraftResponse, TaskCardFields } from "@/shared/contracts";
 import { EMPTY_FIELDS, type FieldKey } from "./model";
+import { fieldMaxLength } from "./builder-workflow";
 
 export type BuilderDraft = {
   description: string;
@@ -44,8 +45,8 @@ export function manualCardFromDraft(draft: BuilderDraft): TaskCardFields {
   const description = draft.description.trim();
   const fields: TaskCardFields = {
     ...EMPTY_FIELDS,
-    title: description.slice(0, 180),
-    contextAndNeed: description,
+    title: description.slice(0, fieldMaxLength("title")),
+    contextAndNeed: description.slice(0, fieldMaxLength("contextAndNeed")),
     industry: draft.industry,
     initialDescription: description,
   };

@@ -48,12 +48,14 @@ export type TaskService = {
   generate: (input: CardInput) => Promise<BuildCardResponse>;
   saveTask: (input: SaveInput, id?: string) => Promise<TaskCard>;
   publishTask: (id: string, expectedVersion?: number) => Promise<TaskCard>;
+  archiveTask: (id: string, expectedVersion?: number) => Promise<TaskCard>;
   listTeams: () => Promise<Team[]>;
   listProposals: (taskId: string) => Promise<Proposal[]>;
   submitProposal: (taskId: string, input: ProposalInput) => Promise<Proposal>;
   decideProposal: (
     id: string,
     status: "accepted" | "rejected",
+    decisionComment?: string,
   ) => Promise<Proposal>;
   listMilestones: (taskId: string) => Promise<Milestone[]>;
   confirmMilestone: (proposalId: string) => Promise<Milestone>;

@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import Link from "next/link";
 import { taskService } from "@/lib/client/service";
 import { useResource } from "@/lib/client/use-resource";
-import { ErrorNotice, Icon, LoadingState } from "./ui";
+import { ErrorNotice, Icon, LoadingState, getTaskTitle } from "./ui";
 
 export function PublishedTask({ id }: { id: string }) {
   const load = useCallback(() => taskService.getTask(id), [id]);
@@ -15,7 +15,20 @@ export function PublishedTask({ id }: { id: string }) {
         <LoadingState />
       ) : error || !task ? (
         <ErrorNotice message={error || "Задача не найдена."} retry={retry} />
-      ) : task.status !== "published" ? (
+      ) : task.status === "archived" ? (
+        <div className="publish-success">
+          <h1>Задача в архиве</h1>
+          <p>«{getTaskTitle(task)}» закрыта для изменений и новых откликов. История сохранена.</p>
+          <div className="action-row">
+            <Link className="btn btn-secondary" href={`/tasks/${id}`}>
+              Открыть карточку <Icon name="arrow" />
+            </Link>
+            <Link className="btn btn-secondary" href={`/business/tasks/${id}/proposals`}>
+              История откликов
+            </Link>
+          </div>
+        </div>
+      ) : task.status === "draft" ? (
         <div className="publish-success">
           <h1>Это пока черновик</h1>
           <p>Проверьте карточку и подтвердите публикацию.</p>
@@ -35,7 +48,7 @@ export function PublishedTask({ id }: { id: string }) {
             <span>в каталоге</span>
           </h1>
           <p>
-            «{task.title}» доступна всем командам.
+            «{getTaskTitle(task)}» доступна всем командам.
             <br />
             Рейтинг готовности — {task.score} из 100.
           </p>
