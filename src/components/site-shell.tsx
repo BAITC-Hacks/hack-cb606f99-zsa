@@ -47,11 +47,17 @@ export function SiteHeader() {
           >
             Мои задачи
           </Link>
-          <Link href="/#how-it-works">Как это работает</Link>
+          <Link
+            className={path === "/how-it-works" ? "active" : ""}
+            aria-current={path === "/how-it-works" ? "page" : undefined}
+            href="/how-it-works"
+          >
+            Как это работает
+          </Link>
         </nav>
         <div className="nav-actions">
           <ThemeControls />
-          {!isEditingTask && (
+          {path !== "/" && !isEditingTask && (
             <Link className="btn btn-white btn-small" href="/business/new">
               Создать задачу <Icon name="plus" size={16} />
             </Link>

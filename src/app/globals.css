@@ -1277,15 +1277,6 @@ fieldset {
   height: 100%;
   background: var(--progress-fill);
 }
-.start-section {
-  text-align: center;
-  padding: 150px 0 125px;
-}
-.start-section h2 {
-  font-size: 51px;
-  margin: 17px 0 32px;
-  letter-spacing: -0.035em;
-}
 .idea-composer {
   width: min(610px, 100%);
   margin: auto;
@@ -1355,9 +1346,6 @@ fieldset {
   gap: 7px;
   margin-top: 12px;
 }
-.start-section .suggestion-chips {
-  justify-content: center;
-}
 .suggestion-chips button {
   display: flex;
   align-items: center;
@@ -1372,10 +1360,6 @@ fieldset {
 .suggestion-chips button:hover {
   background: var(--surface-hover);
   color: var(--text-primary);
-}
-.start-section > .text-link {
-  margin-top: 28px;
-  font-size: 11px;
 }
 .site-footer {
   max-width: 1200px;
@@ -2569,9 +2553,6 @@ input[type="checkbox"] {
   }
 }
 @media (max-width: 820px) {
-  .main-nav a:last-child {
-    display: none;
-  }
   .hero h1 {
     font-size: 57px;
   }
@@ -2644,13 +2625,6 @@ input[type="checkbox"] {
   }
   .task-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .start-section {
-    padding-top: 95px;
-    padding-bottom: 80px;
-  }
-  .start-section h2 {
-    font-size: 39px;
   }
   .page-title-row h1,
   .builder-heading h1 {
@@ -2921,9 +2895,6 @@ input[type="checkbox"] {
   }
   .tag {
     font-size: 10px;
-  }
-  .start-section h2 {
-    font-size: 35px;
   }
   .idea-composer textarea {
     font-size: 16px;

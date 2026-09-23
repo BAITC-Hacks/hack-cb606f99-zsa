@@ -44,6 +44,7 @@ input, textarea, select { accent-color: var(--accent); }
 .topic-tabs { min-width: 0; max-width: 100%; }
 .topic-tabs button { min-width: 0; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
 .page-content { padding-block: 56px 88px; }
+.how-it-works-page { padding-bottom: 88px; }
 .page-title-row, .builder-heading, .detail-heading { gap: var(--space-3); }
 .page-title-row, .detail-heading { margin-bottom: var(--space-4); }
 .page-title-row h1, .builder-heading h1, .detail-heading h1 {
@@ -271,7 +272,7 @@ textarea { padding: var(--space-2); }
 @media (max-width: 560px) {
   .site-header { padding-bottom: 0; }
   .nav-inner { height: auto; min-height: 72px; padding-top: var(--space-2); gap: var(--space-2) var(--space-1); }
-  .main-nav { padding: var(--space-2) 0; gap: var(--space-3); font-size: var(--text-small); }
+  .main-nav { padding: var(--space-2) 0; gap: var(--space-2); font-size: var(--text-caption); }
   .nav-actions { gap: var(--space-1); }
   .nav-actions .btn { padding: 8px; min-height: 40px; font-size: var(--text-caption); line-height: var(--line-caption); }
   .site-footer { gap: var(--space-3); }

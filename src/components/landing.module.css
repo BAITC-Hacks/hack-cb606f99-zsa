@@ -1,0 +1,58 @@
+.home {
+  display: grid;
+  align-items: center;
+  min-height: calc(100svh - 192px);
+  padding-block: clamp(64px, 10svh, 128px);
+}
+
+.start {
+  width: min(680px, 100%);
+  margin-inline: auto;
+  text-align: center;
+}
+
+.title {
+  margin: 0 0 var(--space-5);
+  font-size: clamp(36px, 4vw, 56px);
+  font-weight: var(--weight-title);
+  line-height: 1.2;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+
+.composer {
+  width: 100%;
+}
+
+.composer:focus-within {
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-card), 0 0 0 1px var(--accent-border);
+}
+
+.examples {
+  justify-content: center;
+}
+
+@media (max-width: 620px) {
+  .home {
+    min-height: calc(100svh - 280px);
+    padding-block: var(--space-6);
+  }
+
+  .title {
+    margin-bottom: var(--space-4);
+  }
+
+  .composer {
+    padding: var(--space-2);
+  }
+
+  .composer :global(.idea-composer-footer) {
+    gap: var(--space-2);
+  }
+
+  .composer :global(.idea-composer-footer) > span {
+    max-width: 190px;
+    line-height: var(--line-caption);
+  }
+}
