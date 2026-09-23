@@ -1,0 +1,223 @@
+"use client";
+import { useCallback, useState } from "react";
+import Link from "next/link";
+import { taskService, IS_DEMO } from "@/lib/client/service";
+import { DEMO_STORAGE_KEY } from "@/lib/client/mock-service";
+import { LEVELS } from "@/lib/client/model";
+import { useResource } from "@/lib/client/use-resource";
+import { Icon, TaskTile, LoadingState, ErrorNotice, EmptyState } from "./ui";
+
+export function Catalog({ business = false }: { business?: boolean }) {
+  const load = useCallback(() => taskService.listTasks(business), [business]);
+  const { data: tasks, loading, error, retry } = useResource(load);
+  const [search, setSearch] = useState("");
+  const [topic, setTopic] = useState("Все темы");
+  const [readiness, setReadiness] = useState("all");
+  const [sort, setSort] = useState("score");
+  const [view, setView] = useState("grid");
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetError, setResetError] = useState("");
+  const topics = [
+    "Все темы",
+    ...new Set(tasks?.map((task) => task.topic || task.industry) ?? []),
+  ];
+  const filtered = (tasks ?? [])
+    .filter(
+      (task) =>
+        (topic === "Все темы" || (task.topic || task.industry) === topic) &&
+        (readiness === "all" || task.readinessLevel === readiness) &&
+        `${task.title} ${task.contextAndNeed} ${task.industry}`
+          .toLocaleLowerCase("ru")
+          .includes(search.toLocaleLowerCase("ru")),
+    )
+    .sort((a, b) =>
+      sort === "new"
+        ? b.createdAt.localeCompare(a.createdAt)
+        : b.score - a.score,
+    );
+  const clearFilters = () => {
+    setSearch("");
+    setTopic("Все темы");
+    setReadiness("all");
+  };
+  return (
+    <main id="main-content" className="container page-content">
+      <div className="page-title-row">
+        <div>
+          <span className="eyebrow">
+            {business ? "РАБОЧЕЕ ПРОСТРАНСТВО" : "ОТКРЫТЫЙ КАТАЛОГ"}
+          </span>
+          <h1>{business ? "Ваши задачи." : "Найдите свою задачу."}</h1>
+          <p>
+            {business
+              ? "Развивайте идеи, повышайте готовность и знакомьтесь с командами."
+              : "Реальные вызовы бизнеса. Возможности для вашей команды."}
+          </p>
+        </div>
+        <Link className="btn btn-white" href="/business/new">
+          <Icon name="plus" size={17} />
+          Создать задачу
+        </Link>
+      </div>
+      {!business && (
+        <div className="catalog-callout">
+          <span className="spark-box">
+            <Icon name="spark" />
+          </span>
+          <div>
+            <strong>Понятная задача — уверенный старт</strong>
+            <p>
+              Рейтинг показывает полноту описания. Откликнуться можно на любую
+              опубликованную задачу.
+            </p>
+          </div>
+          <Link className="text-link" href="/#how-it-works">
+            Как это работает <Icon name="arrow" size={16} />
+          </Link>
+        </div>
+      )}
+      {IS_DEMO && business && (
+        <p className="demo-info">
+          Демо-кабинет одного бизнеса. Задачи и отклики доступны только в этом
+          браузере.
+        </p>
+      )}
+      <div className="filter-toolbar">
+        <label className="search-field">
+          <Icon name="search" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Название, отрасль или ключевое слово"
+            aria-label="Поиск задач"
+          />
+        </label>
+        <select
+          aria-label="Уровень готовности"
+          value={readiness}
+          onChange={(event) => setReadiness(event.target.value)}
+        >
+          <option value="all">Любая готовность</option>
+          {LEVELS.map((level) => (
+            <option value={level.key} key={level.key}>
+              {level.label} · {level.min}–{level.max}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Сортировка"
+          value={sort}
+          onChange={(event) => setSort(event.target.value)}
+        >
+          <option value="score">Сначала готовые</option>
+          <option value="new">Сначала новые</option>
+        </select>
+      </div>
+      <div className="catalog-subtoolbar">
+        <div className="topic-tabs" aria-label="Темы задач">
+          {topics.map((item) => (
+            <button
+              className={item === topic ? "active" : ""}
+              aria-pressed={item === topic}
+              key={item}
+              onClick={() => setTopic(item)}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+        <div className="view-controls">
+          <button
+            className={view === "grid" ? "active" : ""}
+            aria-label="Сетка"
+            aria-pressed={view === "grid"}
+            onClick={() => setView("grid")}
+          >
+            <Icon name="grid" size={16} />
+          </button>
+          <button
+            className={view === "list" ? "active" : ""}
+            aria-label="Список"
+            aria-pressed={view === "list"}
+            onClick={() => setView("list")}
+          >
+            <Icon name="list" size={18} />
+          </button>
+        </div>
+      </div>
+      {loading ? (
+        <LoadingState />
+      ) : error ? (
+        <ErrorNotice message={error} retry={retry} />
+      ) : (
+        <>
+          <div className="result-meta">
+            <span>Найдено: {filtered.length}</span>
+            <span>
+              <span className="blue-dot" />
+              {business
+                ? "Включая неопубликованные черновики"
+                : "Все команды могут откликнуться"}
+            </span>
+          </div>
+          {filtered.length ? (
+            <div className={`task-grid ${view === "list" ? "list-view" : ""}`}>
+              {filtered.map((task) => (
+                <TaskTile task={task} business={business} key={task.id} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="Пока ничего не нашлось"
+              description="Попробуйте другую тему или измените поисковый запрос."
+            >
+              <button className="btn btn-secondary" onClick={clearFilters}>
+                Сбросить фильтры
+              </button>
+            </EmptyState>
+          )}
+        </>
+      )}
+      {business && IS_DEMO && (
+        <div className="reset-area">
+          {resetOpen ? (
+            <>
+              <p>
+                Удалить ваши локальные демо-изменения и восстановить примеры?
+              </p>
+              <button
+                className="btn btn-secondary btn-small"
+                onClick={() => {
+                  try {
+                    localStorage.removeItem(DEMO_STORAGE_KEY);
+                    setResetOpen(false);
+                    setResetError("");
+                    retry();
+                  } catch {
+                    setResetError("Не удалось сбросить данные браузера.");
+                  }
+                }}
+              >
+                Да, восстановить примеры
+              </button>
+              <button
+                className="btn btn-ghost btn-small"
+                onClick={() => setResetOpen(false)}
+              >
+                Отмена
+              </button>
+            </>
+          ) : (
+            <button
+              className="text-link muted"
+              onClick={() => setResetOpen(true)}
+            >
+              Восстановить демо-данные
+            </button>
+          )}
+          {resetError && <ErrorNotice message={resetError} />}
+        </div>
+      )}
+    </main>
+  );
+}

@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import { SiteHeader, SiteFooter } from "@/components/site-shell";
 
 export const metadata: Metadata = {
   title: {
-    default: "AI Sana Tasks",
-    template: "%s | AI Sana Tasks",
+    default: "Task Hub — от идеи к решению",
+    template: "%s | Task Hub",
   },
   description:
     "Платформа подготовки, рейтинга и открытого выбора бизнес-задач.",
@@ -13,8 +14,19 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="ru" className="h-full antialiased">
-      <body className="flex min-h-full flex-col">{children}</body>
+    <html
+      lang="ru"
+      className="h-full antialiased"
+      data-scroll-behavior="smooth"
+    >
+      <body>
+        <a className="skip-link" href="#main-content">
+          Перейти к содержимому
+        </a>
+        <SiteHeader />
+        {children}
+        <SiteFooter />
+      </body>
     </html>
   );
 }
