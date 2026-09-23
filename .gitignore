@@ -35,7 +35,7 @@ yarn-error.log*
 !.env.example
 
 # local MVP data
-/data/*.json
+/data/*
 !/data/.gitkeep
 
 # vercel

@@ -1,11 +1,11 @@
 export const SCORING_DIMENSIONS = [
-  { key: "contextAndNeed", label: "Контекст и потребность", weight: 20 },
-  { key: "dataAndMaterials", label: "Данные и материалы", weight: 20 },
-  { key: "expectedResult", label: "Ожидаемый результат", weight: 15 },
-  { key: "successCriteria", label: "Критерии успеха", weight: 15 },
-  { key: "constraints", label: "Ограничения", weight: 10 },
-  { key: "targetUsers", label: "Пользователи", weight: 10 },
-  { key: "businessContact", label: "Связь с бизнесом", weight: 10 },
+  { key: "contextAndNeed", label: "Контекст и потребность", weight: 20, fields: ["contextAndNeed"] },
+  { key: "dataAndMaterials", label: "Данные и материалы", weight: 20, fields: ["dataAndMaterials"] },
+  { key: "expectedResult", label: "Ожидаемый результат", weight: 15, fields: ["expectedResult"] },
+  { key: "successCriteria", label: "Критерии успеха", weight: 15, fields: ["successCriteria"] },
+  { key: "constraints", label: "Ограничения", weight: 10, fields: ["constraints"] },
+  { key: "targetUsers", label: "Пользователи", weight: 10, fields: ["targetUsers"] },
+  { key: "businessContact", label: "Связь с бизнесом", weight: 10, fields: ["businessContact", "interactionFormat"] },
 ] as const;
 
 export const READINESS_LEVELS = [

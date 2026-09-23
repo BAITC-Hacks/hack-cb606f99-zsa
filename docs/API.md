@@ -1,0 +1,267 @@
+# Backend API: инструкция для frontend
+
+Base URL: `/api` в том же Next.js-приложении. Отдельный backend-процесс и CORS не нужны. Запуск: `pnpm dev`. Все запросы с телом используют `Content-Type: application/json`; лимит — 64 КБ. Даты — ISO 8601 UTC. Неизвестные поля запроса отклоняются.
+
+Источник типов и Zod-схем: `src/shared/contracts.ts`. Можно импортировать их из `@/shared/contracts`; импортировать `@/server` в frontend нельзя. Запросы возвращают JSON с `Cache-Control: no-store`. `POST` создания задачи, команды и отклика возвращает 201; остальные успешные операции — 200.
+
+Авторизации в демоверсии нет. Переключатель роли меняет интерфейс, но не права. Для бизнес-кабинета доступен `status=all`; для каталога используйте стандартный `GET /api/tasks`.
+
+## Форматы ответов
+
+| Операция | Ответ | Zod-схема |
+|---|---|---|
+| Список задач | `{ tasks: TaskCard[], total: number }` | `TaskListResponseSchema` |
+| Создание/чтение/изменение задачи | `{ task: TaskCard }` | `TaskResponseSchema` |
+| Список команд | `{ teams: Team[], total: number }` | `TeamListResponseSchema` |
+| Создание/чтение команды | `{ team: Team }` | `TeamResponseSchema` |
+| Список откликов | `{ proposals: Proposal[], total: number }` | `ProposalListResponseSchema` |
+| Создание/решение по отклику | `{ proposal: Proposal }` | `ProposalResponseSchema` |
+| AI-вопросы | `{ questions, missingFields, ai }` | `AnalyzeDraftResponseSchema` |
+| AI-карточка | `{ card, confirmedFields: [], ai }` | `BuildCardResponseSchema` |
+
+`GET /api/health` проверяет чтение/инициализацию хранилища, возвращает `status`, `service`, `aiProvider`, `storage`, `demoAuth`, `counts` и `timestamp`. Доступность внешнего OpenAI этим запросом не проверяется.
+
+## 1. Уточняющие вопросы
+
+`POST /api/ai/questions`:
+
+```json
+{
+  "initialDescription": "Пекарня хочет сократить списания непроданной выпечки",
+  "fields": { "targetUsers": "Управляющий пекарни" }
+}
+```
+
+`initialDescription`: 10–10000 символов. `fields` необязателен, содержит уже введённые поля карточки, кроме `initialDescription`.
+
+`questions` — минимум 3 объекта `{ id, field, question, reason }`. Сохраняйте связь вопроса с `field`: следующий запрос принимает ответы по именам полей. `missingFields` перечисляет недостающие сведения. В mock неизвестные сведения определяются по пустым полям, а вопросы — шаблонные с контекстом описания. В режиме OpenAI анализируется и текст описания.
+
+Во всех AI-ответах есть:
+
+```json
+{
+  "ai": {
+    "provider": "mock",
+    "fallback": false,
+    "warning": "Деморежим: ответ подготовлен локальным шаблоном, без обращения к AI."
+  }
+}
+```
+
+Показывайте `warning` в интерфейсе. `fallback=true` означает сбой OpenAI и переход к локальному шаблону. `provider=openai, fallback=false, warning=null` — успешный ответ внешней модели.
+
+## 2. Генерация карточки
+
+`POST /api/ai/card`:
+
+```json
+{
+  "initialDescription": "Пекарня хочет сократить списания непроданной выпечки",
+  "fields": { "title": "План выпечки", "topic": "Аналитика" },
+  "answers": [
+    { "field": "dataAndMaterials", "answer": "Обезличенный CSV продаж за 6 месяцев" },
+    { "field": "expectedResult", "answer": "Прогноз объёма выпечки на следующий день" },
+    { "field": "successCriteria", "answer": "Ошибка прогноза не больше 20% на недельной выборке" }
+  ]
+}
+```
+
+`fields` и `answers` необязательны. Если на одно поле пришло несколько ответов, последний имеет приоритет. Нельзя отвечать в `initialDescription`: оно передаётся отдельным свойством. Значения неизвестных полей остаются `""`.
+
+Ответ `card` содержит все поля карточки; ещё нет `id`, `status`, `score`, дат или версии. AI не сохраняет данные и не подтверждает поля. Сохраните `card` отдельным запросом создания, затем отобразите редактируемую форму.
+
+## 3. Создание и редактирование
+
+`POST /api/tasks` принимает непосредственно поля карточки, **без обёртки `card`**. Минимальный запрос:
+
+```json
+{ "initialDescription": "Пекарня хочет сократить списания непроданной выпечки" }
+```
+
+Создаётся `status=draft`, `version=1`, `score=0`. Неуказанные поля — пустые строки, `confirmedFields=[]`. Можно передать заполненные поля и подтверждения, если человек уже проверил их.
+
+Поля:
+
+| Имя | Значение |
+|---|---|
+| `title` | Название |
+| `initialDescription` | Исходный текст бизнеса |
+| `industry` | Отрасль |
+| `topic` | Тема |
+| `contextAndNeed` | Контекст, проблема и потребность |
+| `dataAndMaterials` | Доступные данные, формат и способ получения |
+| `expectedResult` | Ожидаемый результат |
+| `successCriteria` | Измеримые критерии успеха |
+| `constraints` | Сроки, бюджет, технические и иные ограничения |
+| `targetUsers` | Пользователи результата |
+| `businessContact` | Контакт представителя бизнеса |
+| `interactionFormat` | Формат/частота встреч и срок обратной связи |
+
+Все значения — строки. `title`, `industry`, `topic`, `businessContact` — до 200 символов; `initialDescription` — 10–10000; остальные — до 5000. Пробелы по краям удаляются. Пустые строки допустимы, кроме исходного описания. Если ограничения отсутствуют, бизнес может явно написать «Ограничений нет» и подтвердить это утверждение.
+
+`GET /api/tasks/:id` возвращает карточку любого статуса.
+
+`PATCH /api/tasks/:id` принимает только изменяемые поля и, при необходимости, `confirmedFields`, `expectedVersion`:
+
+```json
+{
+  "title": "План выпечки",
+  "contextAndNeed": "Нужно уменьшить ежедневные списания непроданной выпечки",
+  "confirmedFields": ["title", "contextAndNeed"],
+  "expectedVersion": 1
+}
+```
+
+Список `confirmedFields` **целиком заменяет** прежний, а не дополняет его. Он должен соответствовать текущим отметкам человека в форме. В примере получится 20 баллов за контекст; название не даёт баллов. Чтобы снять все подтверждения, передайте `[]`.
+
+Если список не передан, подтверждения неизменённых полей сохраняются, изменённых — снимаются. Изменение `initialDescription` снимает все подтверждения, если явно не прислан новый список. Пустые поля подтверждать нельзя: 422 `EMPTY_CONFIRMATION`.
+
+`expectedVersion` рекомендуется передавать из последнего ответа. При конфликте — 409 `VERSION_CONFLICT`: загрузите карточку заново и предложите пользователю повторно применить правки. Без версии сервер применяет изменения к последней записи. `version` растёт после изменения карточки. Значения `score`, `status`, `id` и даты напрямую записывать нельзя.
+
+## 4. Рейтинг и публикация
+
+В каждом ответе `TaskCard` находятся:
+
+- `score`: 0–100;
+- `readinessLevel`: `draft` / `workable` / `ready` / `priority`;
+- `scoreBreakdown`: семь показателей `{ key, label, weight, earned, fields, missingFields, unconfirmedFields, explanation }`;
+- `missingFields`: незаполненные поля, влияющие на рейтинг;
+- `unconfirmedFields`: заполненные, но неподтверждённые поля, влияющие на рейтинг;
+- `confirmedFields`, `version`, `createdAt`, `updatedAt`, `publishedAt`.
+
+Формула и веса описаны в [README](../README.md#рейтинг-готовности). «Связь с бизнесом» даёт 10 только за оба подтверждённых поля: `businessContact` и `interactionFormat`. Клиент показывает результат сервера.
+
+`POST /api/tasks/:id/publish`:
+
+```json
+{ "confirmed": true, "expectedVersion": 2 }
+```
+
+Вызывайте по явному действию пользователя «Проверил, опубликовать». Нужны непустое название и `title` в `confirmedFields`; другие поля и рейтинг публикацию не блокируют. Даже 0 баллов допустимы. Задача получает `status=published` и `publishedAt`. Повторная публикация уже опубликованной задачи не создаёт дубликат.
+
+`status=draft` — неопубликованная задача, а `readinessLevel=draft` — низкая готовность. Это разные признаки: опубликованная задача может иметь готовность `draft` и быть доступной всем командам.
+
+`POST /api/tasks/:id/archive` принимает `{}` или `{ "expectedVersion": 3 }`. Архив убирает задачу из стандартного каталога и закрывает изменения/новые отклики/решения. История остаётся доступной через GET. Восстановление из архива в MVP не реализовано.
+
+## 5. Каталог и кабинет бизнеса
+
+`GET /api/tasks` по умолчанию возвращает только опубликованные задачи. Параметры комбинируются:
+
+| Параметр | Значения/поведение |
+|---|---|
+| `status` | `published` (по умолчанию), `draft`, `archived`, `all` |
+| `readinessLevel` | `draft`, `workable`, `ready`, `priority` |
+| `topic` | Полное совпадение темы без учёта регистра |
+| `industry` | Полное совпадение отрасли без учёта регистра |
+| `q` | Подстрока в названии, описании, контексте, теме или отрасли |
+
+Примеры: `/api/tasks?status=all`, `/api/tasks?readinessLevel=ready`, `/api/tasks?topic=Аналитика`. Используйте `URLSearchParams` для кодирования кириллицы. Пустая выборка — `{ tasks: [], total: 0 }`. Пагинации в MVP нет. Сортировка: баллы по убыванию, затем дата создания по убыванию, затем id для стабильного порядка.
+
+## 6. Команды и отклики
+
+`GET /api/teams` возвращает доступные профили; `GET /api/teams/:id` — один профиль. Для демо можно выбрать существующую команду в интерфейсе. `POST /api/teams` создаёт новую:
+
+```json
+{
+  "name": "Data Nomads",
+  "interests": ["Аналитика"],
+  "skills": ["Анализ данных", "Backend"],
+  "technologies": ["Python", "React"]
+}
+```
+
+Каждый список содержит 1–20 непустых строк; название и элементы — до 200 символов.
+
+`POST /api/tasks/:id/proposals`:
+
+```json
+{
+  "teamId": "team-1",
+  "solutionIdea": "Панель прогноза спроса по дням недели",
+  "plan": "Импорт CSV, базовый прогноз, проверка на отложенной выборке",
+  "estimatedDuration": "2 недели",
+  "prototypeUrl": "https://example.com/prototype"
+}
+```
+
+`solutionIdea`, `plan`, `estimatedDuration` обязательны. Ссылку можно не передавать или передать `""`; непустая должна быть HTTP(S). Команда должна существовать, задача — быть опубликована. Рейтинг задачи, навыки команды и чужие принятые предложения не ограничивают отклик. Можно отправить несколько предложений одной команды.
+
+`GET /api/tasks/:id/proposals` — отклики конкретной задачи. `GET /api/proposals` — все отклики. Оба поддерживают `teamId` и `status=pending|accepted|rejected`. Профиль команды для отображения имени/навыков берите из `GET /api/teams` по `teamId`.
+
+`PATCH /api/proposals/:id/status`:
+
+```json
+{ "status": "accepted", "decisionComment": "Приглашаем обсудить прототип" }
+```
+
+Разрешены только `accepted` или `rejected`; комментарий необязателен. Решение — ручное, можно принять несколько предложений, все отклонить или оставить их без решения. Можно изменить своё прежнее решение. Другие отклики автоматически не меняются. Ответ содержит `status`, `decisionComment`, `decidedAt`, `updatedAt`.
+
+## Обработка ошибок
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Проверьте поля запроса.",
+    "details": [{ "path": "initialDescription", "message": "..." }]
+  }
+}
+```
+
+| HTTP | Код | Действие интерфейса |
+|---|---|---|
+| 400 | `VALIDATION_ERROR`, `INVALID_JSON` | Показать ошибки полей/запроса |
+| 404 | `NOT_FOUND` | Объект не существует |
+| 409 | `VERSION_CONFLICT` | Перечитать карточку перед сохранением |
+| 409 | `TASK_ARCHIVED`, `TASK_NOT_PUBLISHED` | Обновить статус и доступные действия |
+| 413 | `BODY_TOO_LARGE` | Уменьшить запрос до 64 КБ |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` | Отправлять JSON с нужным заголовком |
+| 422 | `EMPTY_CONFIRMATION`, `REVIEW_REQUIRED`, `TITLE_REQUIRED` | Заполнить/подтвердить необходимые поля |
+| 502 | `AI_UNAVAILABLE` | Повторить позже или заполнить вручную |
+| 503 | `STORAGE_BUSY`, `STORAGE_INVALID` | Сообщить о недоступности хранилища |
+| 500 | `INTERNAL_ERROR` | Показать общую ошибку и возможность повторить |
+
+## Пример вызова из frontend
+
+```ts
+import { TaskResponseSchema } from "@/shared/contracts";
+
+async function json(path: string, method = "GET", body?: unknown) {
+  const response = await fetch(`/api${path}`, {
+    method,
+    ...(body === undefined ? {} : {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    // В форме дополнительно используйте payload.error.code и details.
+    throw new Error(payload.error?.message ?? "Ошибка запроса");
+  }
+  return payload;
+}
+
+const { task } = TaskResponseSchema.parse(await json("/tasks", "POST", {
+  initialDescription: "Пекарня хочет сократить списания непроданной выпечки",
+}));
+
+// После ручного редактирования и подтверждения пользователем:
+const saved = TaskResponseSchema.parse(await json(`/tasks/${task.id}`, "PATCH", {
+  title: "План выпечки",
+  confirmedFields: ["title"],
+  expectedVersion: task.version,
+}));
+
+// Отдельное действие пользователя «Опубликовать»:
+await json(`/tasks/${task.id}/publish`, "POST", {
+  confirmed: true,
+  expectedVersion: saved.task.version,
+});
+```
+
+## Демо и проверка
+
+В начальной базе `task-1`…`task-4` опубликованы с рейтингами 100, 80, 40 и 20; `task-5` — неопубликованный черновик. Есть `team-1`…`team-5` и `proposal-1`…`proposal-5` с разными статусами. Это вымышленные данные и демонстрационные ссылки `example.com`.
+
+Полный автоматический сценарий: `pnpm build`, затем `pnpm test:smoke`. Скрипт использует отдельный временный JSON, создаёт задачу через AI mock, подтверждает поля, публикует, подаёт отклики, принимает несколько, отклоняет один, проверяет ошибки и сохранность после перезапуска. После проверки временная база удаляется, рабочая база не меняется.

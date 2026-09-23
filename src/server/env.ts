@@ -8,6 +8,8 @@ const serverEnvSchema = z
     OPENAI_API_KEY: z.string().min(1).optional(),
     OPENAI_MODEL: z.string().min(1).optional(),
     DATA_FILE_PATH: z.string().min(1).default("./data/db.json"),
+    AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60000).default(15000),
+    AI_FALLBACK_TO_MOCK: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
   })
   .superRefine((env, context) => {
     if (env.AI_PROVIDER !== "openai") {
@@ -36,4 +38,6 @@ export const serverEnv = serverEnvSchema.parse({
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || undefined,
   OPENAI_MODEL: process.env.OPENAI_MODEL || undefined,
   DATA_FILE_PATH: process.env.DATA_FILE_PATH,
+  AI_TIMEOUT_MS: process.env.AI_TIMEOUT_MS,
+  AI_FALLBACK_TO_MOCK: process.env.AI_FALLBACK_TO_MOCK,
 });
