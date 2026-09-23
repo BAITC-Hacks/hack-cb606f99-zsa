@@ -1,12 +1,17 @@
 import {
-  AnalysisSchema, AnalyzeDraftRequestSchema, BuildCardRequestSchema, TaskCardFieldsSchema,
+  AnalysisSchema, AnalyzeDraftRequestSchema, BuildCardRequestSchema, ClarifyingQuestionSchema, TaskCardFieldsSchema, TASK_FIELDS, emptyTaskFields,
   type AiMetadata, type AnalyzeDraftResponse, type BuildCardResponse, type TaskCardFields, type TaskField,
 } from "../../shared/contracts";
 import { AppError } from "../errors";
 import { MockAiProvider } from "./mock";
 import { AiOutputError, safeAiDiagnostic } from "./errors";
 import { sourceQuote } from "./grounding";
+import { relevantQuestions } from "./questions";
+import { FIELD_LABELS } from "./fields";
+import { z } from "zod";
 import type { AiProvider, CardInput } from "./provider";
+
+const CandidateAnalysisSchema = AnalysisSchema.extend({ questions: z.array(ClarifyingQuestionSchema).max(12) });
 
 function validateCard(input: CardInput, result: unknown): { card: TaskCardFields; rejectedFields: TaskField[] } {
   const card = TaskCardFieldsSchema.parse(result);
@@ -27,6 +32,11 @@ function validateCard(input: CardInput, result: unknown): { card: TaskCardFields
   if (!card.contextAndNeed && input.fields?.contextAndNeed === undefined &&
       !input.answers.some((answer) => answer.field === "contextAndNeed")) {
     card.contextAndNeed = input.initialDescription.slice(0, 5000);
+  }
+  if (!card.title && input.fields?.title === undefined && !input.answers.some((answer) => answer.field === "title")) {
+    const source = card.expectedResult || card.contextAndNeed || input.initialDescription;
+    card.title = source.split(/[.!?](?:\s|$)/u)[0].slice(0, 200).trim();
+    if (!card.title) card.title = input.initialDescription.slice(0, 200);
   }
   return { card: TaskCardFieldsSchema.parse(card), rejectedFields };
 }
@@ -60,12 +70,15 @@ export class AiService {
   async analyze(value: unknown): Promise<AnalyzeDraftResponse> {
     const input = AnalyzeDraftRequestSchema.parse(value);
     const { result, ai } = await this.run(async (provider) => {
-      const analysis = AnalysisSchema.parse(await provider.analyze(input));
+      const generated = await provider.analyze(input);
+      const analysis = CandidateAnalysisSchema.parse(generated);
       if (new Set(analysis.questions.map((question) => question.id)).size !== analysis.questions.length ||
           new Set(analysis.questions.map((question) => question.question.toLocaleLowerCase("ru"))).size !== analysis.questions.length) {
         throw new AiOutputError("DUPLICATE_QUESTIONS");
       }
-      return { ...analysis, missingFields: [...new Set(analysis.missingFields)] };
+      const { card } = validateCard({ ...input, answers: [] }, generated.knownFields ?? emptyTaskFields(input.initialDescription));
+      const missingFields = TASK_FIELDS.filter((field) => !card[field]);
+      return AnalysisSchema.parse({ questions: relevantQuestions(analysis.questions, card, missingFields), missingFields });
     });
     return { ...result, ai };
   }
@@ -78,7 +91,7 @@ export class AiService {
     TaskCardFieldsSchema.partial().parse(supplied);
     const { result, ai } = await this.run(async (provider) => validateCard(input, await provider.buildCard(input)));
     if (result.rejectedFields.length) {
-      const warning = `Предложения AI для полей ${result.rejectedFields.join(", ")} не подтверждены исходным текстом и не использованы. Проверьте эти поля вручную.`;
+      const warning = `Предложения AI для полей ${result.rejectedFields.map((field) => FIELD_LABELS[field]).join(", ")} не подтверждены исходным текстом и не использованы. Проверьте эти поля вручную.`;
       ai.warning = ai.warning ? `${ai.warning} ${warning}` : warning;
     }
     return { card: result.card, confirmedFields: [], ai };

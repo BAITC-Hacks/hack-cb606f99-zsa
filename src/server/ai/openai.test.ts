@@ -36,4 +36,16 @@ describe("OpenAI adapter", () => {
     expect(result.ai).toMatchObject({ provider: "mock", fallback: true });
     expect(result.questions.length).toBeGreaterThanOrEqual(3);
   });
+  it("extracts known facts together with questions while preserving the public response shape", async () => {
+    parse.mockResolvedValue({ status: "completed", output_parsed: {
+      knownFields: { ...emptyTaskFields(input.initialDescription), contextAndNeed: input.initialDescription },
+      questions: [],
+    } });
+    const provider = new OpenAiProvider({ apiKey: "test-only-key", model: "configured-model", timeoutMs: 1000 });
+    const response = await new AiService(provider, "openai", false).analyze(input);
+    expect(response.questions.length).toBeGreaterThanOrEqual(3);
+    expect(response.missingFields).not.toContain("contextAndNeed");
+    expect(response).not.toHaveProperty("knownFields");
+    expect(parse).toHaveBeenCalledTimes(1);
+  });
 });

@@ -46,9 +46,9 @@ describe("AI pipeline", () => {
     vi.spyOn(provider, "buildCard").mockResolvedValue({ ...emptyTaskFields(input.initialDescription), businessContact: "invented@example.com" });
     const card = await ai.buildCard(input);
     expect(card.ai).toMatchObject({ provider: "openai", fallback: false });
-    expect(card.ai.warning).toContain("businessContact");
+    expect(card.ai.warning).toContain("Контакт бизнеса");
     expect(card.card.businessContact).toBe("");
-    vi.spyOn(provider, "analyze").mockResolvedValue({ questions: [], missingFields: [] });
+    vi.spyOn(provider, "analyze").mockResolvedValue({ questions: undefined as never, missingFields: [] });
     expect((await ai.analyze(input)).ai.fallback).toBe(true);
   });
   it("can disable fallback and report a controlled upstream failure", async () => {
@@ -93,7 +93,7 @@ describe("AI pipeline", () => {
     const result = await new AiService(provider, "openai", false).buildCard(input);
     expect(result.card.title).toBe("Пекарня");
     expect(result.card.constraints).toBe("");
-    expect(result.ai.warning).toContain("constraints");
+    expect(result.ai.warning).toContain("Ограничения");
     expect(JSON.stringify(result)).not.toContain("500000");
     expect(result.confirmedFields).toEqual([]);
   });
