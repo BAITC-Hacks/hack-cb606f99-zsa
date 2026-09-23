@@ -9,7 +9,14 @@ import type {
 } from "@/shared/contracts";
 import { taskService, IS_DEMO, ApiClientError } from "@/lib/client/service";
 import { useResource } from "@/lib/client/use-resource";
-import { builderDraftReducer, manualCardFromDraft } from "@/lib/client/builder-draft";
+import { builderDraftReducer, manualCardFromDraft, type BuilderDraft } from "@/lib/client/builder-draft";
+import {
+  builderSessionConflict,
+  clearBuilderSession,
+  getBuilderSessionStorage,
+  readBuilderSession,
+  writeBuilderSession,
+} from "@/lib/client/builder-session";
 import {
   canSaveDraft,
   descriptionMinLength,
@@ -31,7 +38,14 @@ import {
   DEMO_DESCRIPTION,
   DRAFT_EXAMPLES,
 } from "@/lib/client/seeds";
-import { Icon, ScorePanel, LoadingState, ErrorNotice } from "./ui";
+import { Icon, Select, ScorePanel, LoadingState, ErrorNotice } from "./ui";
+
+function restorableDraftReducer(
+  draft: BuilderDraft,
+  action: Parameters<typeof builderDraftReducer>[1] | { type: "restore"; draft: BuilderDraft },
+) {
+  return action.type === "restore" ? action.draft : builderDraftReducer(draft, action);
+}
 
 export function EditTask({ id, publicationRetry = false }: { id: string; publicationRetry?: boolean }) {
   const load = useCallback(() => taskService.getTask(id), [id]);
@@ -68,8 +82,8 @@ export function EditTask({ id, publicationRetry = false }: { id: string; publica
 
 export function TaskBuilder({ initialTask, publicationRetry = false }: { initialTask?: TaskCard; publicationRetry?: boolean }) {
   const router = useRouter();
-  const [step, setStep] = useState(initialTask ? 2 : 0);
-  const [draft, dispatchDraft] = useReducer(builderDraftReducer, {
+  const [step, setStep] = useState<0 | 1 | 2>(initialTask ? 2 : 0);
+  const [draft, dispatchDraft] = useReducer(restorableDraftReducer, {
     description: initialTask?.initialDescription ?? "",
     industry: initialTask?.industry ?? "Ритейл",
     questions: [],
@@ -93,20 +107,71 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
   const [publishConsent, setPublishConsent] = useState(false);
   const [aiMetadata, setAiMetadata] = useState<AiMetadata | null>(null);
   const [conflict, setConflict] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const requestInFlight = useRef(false);
+  const navigationPending = useRef(false);
   useEffect(() => {
-    if (initialTask) return;
-    try {
-      const draft = sessionStorage.getItem("sana-start-description");
-      if (draft) {
-        queueMicrotask(() => dispatchDraft({ type: "source", description: draft }));
-        sessionStorage.removeItem("sana-start-description");
+    if (sessionReady) return;
+    let cancelled = false;
+    // Read only after hydration. The first client render matches the server and
+    // persistence stays off until restoration has finished (including Strict Mode).
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const storage = getBuilderSessionStorage();
+      let incomingDescription = "";
+      if (!initialTask) {
+        try {
+          incomingDescription = storage?.getItem("sana-start-description") ?? "";
+          storage?.removeItem("sana-start-description");
+        } catch {
+          // The editor remains available when browser storage is blocked.
+        }
       }
-    } catch {
-      // The form remains usable when browser storage is disabled.
+      if (incomingDescription) {
+        // Starting with a fresh idea on the home page is an explicit new draft.
+        clearBuilderSession(null, storage);
+        dispatchDraft({ type: "source", description: incomingDescription });
+      } else {
+        const backup = readBuilderSession(initialTask?.id ?? null, storage);
+        if (backup) {
+          dispatchDraft({ type: "restore", draft: backup.draft });
+          setStep(backup.step);
+          setFields(backup.fields);
+          setConfirmed(backup.confirmed);
+          setAiMetadata(backup.aiMetadata);
+          setDirty(true);
+          setPublishConsent(false);
+          setNotice("Восстановлены несохранённые изменения в этой вкладке");
+          if (initialTask && backup.expectedVersion !== null) {
+            // Keep the original version even if the server changed while the
+            // user was away; stale local edits must never overwrite newer data.
+            setSavedTask({ ...initialTask, version: backup.expectedVersion });
+            setConflict(builderSessionConflict(backup, initialTask.version));
+          }
+        }
+      }
+      setSessionReady(true);
+    });
+    return () => { cancelled = true; };
+  }, [initialTask, sessionReady]);
+  useEffect(() => {
+    if (!sessionReady) return;
+    const taskId = initialTask?.id ?? null;
+    if (!dirty || (!description.trim() && !fields.title.trim())) {
+      clearBuilderSession(taskId);
+      return;
     }
-  }, [initialTask]);
+    writeBuilderSession({
+      taskId,
+      expectedVersion: initialTask ? savedTask?.version ?? initialTask.version : null,
+      step,
+      draft,
+      fields,
+      confirmed,
+      aiMetadata,
+    });
+  }, [sessionReady, initialTask, savedTask?.version, dirty, description, step, draft, fields, confirmed, aiMetadata]);
   useEffect(() => {
     if (step > 0) {
       heading.current?.focus();
@@ -137,8 +202,22 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
       )
         setConflict(true);
     } finally {
-      setBusy("");
-      requestInFlight.current = false;
+      // A successful save may move /new to an editor with a different backup
+      // key. Keep inputs locked until that route mounts, even on a slow network.
+      if (!navigationPending.current) {
+        setBusy("");
+        requestInFlight.current = false;
+      }
+    }
+  }
+  function navigateAfterSave(url: string, replace = false) {
+    navigationPending.current = true;
+    try {
+      if (replace) router.replace(url);
+      else router.push(url);
+    } catch (error) {
+      navigationPending.current = false;
+      throw error;
     }
   }
   function updateField(key: FieldKey, value: string) {
@@ -178,6 +257,7 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
     setFields(fieldsOnly(result));
     setConfirmed(result.confirmedFields);
     setDirty(false);
+    clearBuilderSession(initialTask?.id ?? null);
     return result;
   }
   const score =
@@ -251,6 +331,7 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                     setConfirmed(latest.confirmedFields);
                     dispatchDraft({ type: "source", description: latest.initialDescription, industry: latest.industry });
                     setDirty(false);
+                    clearBuilderSession(initialTask?.id ?? null);
                     setConflict(false);
                     setPublishConsent(false);
                     setNotice(
@@ -311,7 +392,7 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                 <label className="field-label" htmlFor="industry">
                   Отрасль
                 </label>
-                <select
+                <Select
                   id="industry"
                   value={industry}
                   onChange={(event) => updateSource({ industry: event.target.value })}
@@ -319,7 +400,7 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                   {INDUSTRIES.map((value) => (
                     <option key={value}>{value}</option>
                   ))}
-                </select>
+                </Select>
                 <div className="example-area">
                   <span className="small-text muted">
                     Или начните с примера
@@ -507,7 +588,7 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                 <div className="two-fields">
                   <label>
                     Отрасль
-                    <select
+                    <Select
                       value={fields.industry}
                       onChange={(event) =>
                         updateField("industry", event.target.value)
@@ -518,7 +599,7 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                           <option key={value}>{value}</option>
                         ),
                       )}
-                    </select>
+                    </Select>
                   </label>
                   <label>
                     Тема
@@ -624,7 +705,7 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                           const result = await save();
                           setNotice("Изменения сохранены.");
                           if (!initialTask) {
-                            router.replace(`/business/tasks/${encodeURIComponent(result.id)}/edit`);
+                            navigateAfterSave(`/business/tasks/${encodeURIComponent(result.id)}/edit`, true);
                           }
                         })
                       }
@@ -653,12 +734,12 @@ export function TaskBuilder({ initialTask, publicationRetry = false }: { initial
                         } catch (error) {
                           // Creation already succeeded. Even a failed publish must leave a reloadable URL.
                           if (!initialTask) {
-                            router.replace(`/business/tasks/${encodeURIComponent(result.id)}/edit?publication=retry`);
+                            navigateAfterSave(`/business/tasks/${encodeURIComponent(result.id)}/edit?publication=retry`, true);
                           }
                           throw error;
                         }
                         setSavedTask(publishedTask);
-                        router.push(
+                        navigateAfterSave(
                           `/business/tasks/${publishedTask.id}/published`,
                         );
                         setDirty(false);

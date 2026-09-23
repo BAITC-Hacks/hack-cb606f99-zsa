@@ -1,8 +1,9 @@
 "use client";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { taskService, ApiClientError } from "@/lib/client/service";
 import { useResource } from "@/lib/client/use-resource";
+import { clearProposalDraft, EMPTY_PROPOSAL, PROPOSAL_LIMITS, readProposalDraft, saveProposalDraft } from "@/lib/client/proposal-draft";
 import {
   FIELD_LABELS,
   errorMessage,
@@ -11,6 +12,7 @@ import {
 } from "@/lib/client/model";
 import {
   Icon,
+  Select,
   Badge,
   ScorePanel,
   TaskArtwork,
@@ -29,20 +31,30 @@ export function TaskDetails({ id }: { id: string }) {
     ]);
     return { task, teams, proposals };
   }, [id]);
-  const { data, loading, error, retry } = useResource(load);
-  const [form, setForm] = useState<ProposalInput>({
-    teamId: "",
-    solutionIdea: "",
-    plan: "",
-    estimatedDuration: "",
-    prototypeUrl: "",
-  });
+  const { data, loading, error, refreshError, retry } = useResource(load);
+  const [form, setForm] = useState<ProposalInput>(EMPTY_PROPOSAL);
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const draft = readProposalDraft(id);
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setForm(draft ?? EMPTY_PROPOSAL);
+      setDraftRestored(!!draft);
+      setDraftReady(true);
+    });
+    return () => { cancelled = true; };
+  }, [id]);
+  useEffect(() => {
+    if (draftReady) saveProposalDraft(id, form);
+  }, [id, form, draftReady]);
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [sent, setSent] = useState(false);
   const guard = useRef(false);
   const proposalForm = useRef<HTMLDivElement>(null);
-  if (loading)
+  if (loading || !draftReady)
     return (
       <main id="main-content" className="container page-content">
         <LoadingState />
@@ -113,6 +125,7 @@ export function TaskDetails({ id }: { id: string }) {
           Предложить решение <Icon name="arrow" />
         </button>
       </div>
+      {refreshError && <ErrorNotice message={refreshError} retry={retry} />}
       {!published && (
         <p className="demo-info">
           {task.status === "archived"
@@ -200,6 +213,9 @@ export function TaskDetails({ id }: { id: string }) {
                       ...form,
                       teamId: form.teamId || teams[0]?.id || "",
                     });
+                    clearProposalDraft(id);
+                    setForm({ ...EMPTY_PROPOSAL, teamId: form.teamId });
+                    setDraftRestored(false);
                     setSent(true);
                     retry();
                   } catch (err) {
@@ -219,10 +235,11 @@ export function TaskDetails({ id }: { id: string }) {
                   </div>
                 </div>
                 {submitError && <ErrorNotice message={submitError} />}
+                {draftRestored && <p className="small-text muted" role="status">Восстановлен неотправленный отклик</p>}
                 <fieldset disabled={busy || !published}>
                   <label className="form-field">
                     Команда
-                    <select
+                    <Select
                       value={form.teamId || teams[0]?.id || ""}
                       onChange={(event) => update("teamId", event.target.value)}
                       required
@@ -232,13 +249,13 @@ export function TaskDetails({ id }: { id: string }) {
                           {team.name} / {team.skills.join(", ")}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                   <label className="form-field">
                     Идея решения
                     <textarea
                       rows={4}
-                      maxLength={3000}
+                      maxLength={PROPOSAL_LIMITS.solutionIdea}
                       required
                       value={form.solutionIdea}
                       onChange={(event) =>
@@ -251,7 +268,7 @@ export function TaskDetails({ id }: { id: string }) {
                     План работы
                     <textarea
                       rows={4}
-                      maxLength={3000}
+                      maxLength={PROPOSAL_LIMITS.plan}
                       required
                       value={form.plan}
                       onChange={(event) => update("plan", event.target.value)}
@@ -263,7 +280,7 @@ export function TaskDetails({ id }: { id: string }) {
                       Ожидаемый срок
                       <input
                         required
-                        maxLength={120}
+                        maxLength={PROPOSAL_LIMITS.estimatedDuration}
                         placeholder="Например, 2 недели"
                         value={form.estimatedDuration}
                         onChange={(event) =>
@@ -277,7 +294,7 @@ export function TaskDetails({ id }: { id: string }) {
                       <input
                         type="url"
                         pattern="https?://.+"
-                        maxLength={1000}
+                        maxLength={PROPOSAL_LIMITS.prototypeUrl}
                         placeholder="https://…"
                         value={form.prototypeUrl}
                         onChange={(event) =>

@@ -25,7 +25,7 @@ export function Landing() {
   const [preview, setPreview] = useState<"before" | "after">("after");
   const score = preview === "after" ? 100 : 20;
   const load = useCallback(() => taskService.listTasks(), []);
-  const { data, loading, error, retry } = useResource(load);
+  const { data, loading, error, refreshError, retry } = useResource(load);
   const featured = data?.slice(0, 3) ?? [];
   const [inputError, setInputError] = useState("");
   function start() {
@@ -248,6 +248,7 @@ export function Landing() {
             </h2>
           </div>
         </div>
+        {refreshError && <ErrorNotice message={refreshError} retry={retry} />}
         {loading ? (
           <LoadingState label="Находим задачи…" />
         ) : error ? (

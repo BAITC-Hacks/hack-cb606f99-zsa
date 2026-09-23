@@ -30,7 +30,10 @@
   --text-on-accent: #ffffff;
   --text-on-art: #fff9ed;
   --text-on-art-muted: #f5ebdce8;
-  --header-bg: #050505ed;
+  --header-bg: #0c1018a6;
+  --header-sheen: #ffffff08;
+  --header-border: #ffffff1c;
+  --header-shadow: 0 8px 32px #00000026, inset 0 1px 0 #ffffff08;
   --glass-bg: #101319a8;
   --glass-hover: #101319d6;
   --glass-border: #ffffff38;
@@ -103,7 +106,10 @@
   --button-primary-bg: #202b3a;
   --button-primary-hover: #344359;
   --button-primary-text: #ffffff;
-  --header-bg: #f6f7f9ed;
+  --header-bg: #f6f7f9b8;
+  --header-sheen: #ffffff70;
+  --header-border: #bcc7d68f;
+  --header-shadow: 0 8px 32px #24334d0d, inset 0 1px 0 #ffffffcc;
   --glass-bg: #ffffffc2;
   --glass-hover: #fffffff0;
   --glass-border: #ffffffc9;

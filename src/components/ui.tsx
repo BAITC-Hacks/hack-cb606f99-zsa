@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode, SVGProps } from "react";
+import type { ComponentProps, CSSProperties, ReactNode, SVGProps } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import type { TaskCard, TaskCardFields } from "@/shared/contracts";
@@ -20,6 +20,7 @@ type IconName =
   | "grid"
   | "list"
   | "chevron"
+  | "chevronDown"
   | "back"
   | "users"
   | "clock"
@@ -48,6 +49,7 @@ const paths: Record<IconName, ReactNode> = {
   ),
   list: <path d="M8 5h13M8 12h13M8 19h13M3 5h.01M3 12h.01M3 19h.01" />,
   chevron: <path d="m8 4 8 8-8 8" />,
+  chevronDown: <path d="m6 9 6 6 6-6" />,
   back: <path d="M20 12H5m6-6-6 6 6 6" />,
   users: (
     <>
@@ -96,6 +98,15 @@ export function Icon({
     </svg>
   );
 }
+export function Select({ children, ...props }: ComponentProps<"select">) {
+  return (
+    <span className="select-control">
+      <select {...props}>{children}</select>
+      <Icon name="chevronDown" size={16} className="select-chevron" />
+    </span>
+  );
+}
+
 export function BrandMark() {
   return (
     <span className="brand-mark" aria-hidden="true">

@@ -38,7 +38,7 @@
   width: min(224px, calc(100vw - 32px));
   padding: 16px;
   color: var(--text-primary);
-  background: var(--glass-bg);
+  background: var(--glass-hover);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-card);
   backdrop-filter: blur(20px);

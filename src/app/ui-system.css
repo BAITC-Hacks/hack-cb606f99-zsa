@@ -41,6 +41,8 @@ input, textarea, select { accent-color: var(--accent); }
 .main-nav { gap: var(--space-3); }
 .topic-tabs { gap: var(--space-1); }
 .topic-tabs button { min-height: 40px; padding: 8px 16px; font-size: var(--text-small); line-height: var(--line-small); border-radius: var(--radius-control); }
+.topic-tabs { min-width: 0; max-width: 100%; }
+.topic-tabs button { min-width: 0; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
 .page-content { padding-block: 56px 88px; }
 .page-title-row, .builder-heading, .detail-heading { gap: var(--space-3); }
 .page-title-row, .detail-heading { margin-bottom: var(--space-4); }
@@ -137,6 +139,24 @@ input, textarea, select { accent-color: var(--accent); }
 .editor-meta input, .editor-meta select, .form-field input, .form-field textarea, .form-field select { margin-top: var(--space-1); }
 input:not([type="checkbox"]):not([type="radio"]), textarea, select,
 .question-field textarea, .editor-field textarea { font-size: var(--text-body); line-height: var(--line-body); border-radius: var(--radius-control); }
+/* Keep the native picker and keyboard controls, with one consistently inset chevron. */
+.select-control { display: grid; grid-template-areas: "control"; align-items: center; width: 100%; min-width: 0; }
+.select-control > select {
+  grid-area: control; width: 100%; min-width: 0; min-height: 48px; margin: 0;
+  appearance: none; -webkit-appearance: none; padding: 12px 48px 12px 16px; cursor: pointer;
+  text-overflow: ellipsis;
+}
+.select-control > .select-chevron {
+  grid-area: control; justify-self: end; margin-right: 16px; width: 16px; height: 16px;
+  color: var(--text-secondary); pointer-events: none;
+}
+.select-control > select:disabled { cursor: not-allowed; }
+.select-control:has(select:disabled) > .select-chevron { opacity: 0.45; }
+.editor-meta .select-control, .form-field .select-control { margin-top: var(--space-1); }
+@media (forced-colors: active) {
+  .select-control > select { appearance: auto; }
+  .select-control > .select-chevron { display: none; }
+}
 .form-actions .btn, .confirm-all .btn, .proposal-success .btn { font-size: var(--text-small); line-height: var(--line-small); padding: 8px 16px; white-space: normal; }
 .proposal-success > .text-link { font-size: var(--text-small); line-height: var(--line-small); }
 textarea { padding: var(--space-2); }
@@ -180,6 +200,9 @@ textarea { padding: var(--space-2); }
 .proposal-copy { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin: var(--space-3) 0; }
 .proposal-copy > div { min-width: 0; }
 .error-notice, .success-notice, .ai-warning, .conflict-notice { padding: var(--space-2); margin-bottom: var(--space-3); border-radius: var(--radius-control); }
+.original-description, .error-notice, .success-notice, .ai-warning, .conflict-notice,
+.publication-area > p, .proposal-card > .small-text, .publish-success > p { overflow-wrap: anywhere; }
+.original-description { white-space: pre-wrap; }
 .catalog-rating-note { margin: 0 0 var(--space-4); font-size: var(--text-small); line-height: var(--line-small); }
 .catalog-rating-note summary { padding-block: var(--space-1); }
 .back-link { margin-bottom: var(--space-3); }

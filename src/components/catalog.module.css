@@ -1,13 +1,13 @@
 /* Catalog controls share typography and cards with the rest of the app. */
 .catalog :global(.filter-toolbar) { display:grid; grid-template-columns:minmax(0,1fr) 200px 200px; gap:var(--space-2); }
-.catalog :global(.search-field input), .catalog :global(.filter-toolbar > select) {
+.catalog :global(.search-field input), .catalog :global(.filter-toolbar select) {
   width:100%; min-width:0; min-height:56px; border-radius:var(--radius-control);
   background:var(--input-bg); border-color:var(--border); color:var(--text-primary); font-size:var(--text-small);
 }
 .catalog :global(.filter-toolbar .search-field input) { padding-left:48px; font-size:var(--text-body); }
 .catalog :global(.search-field svg) { left:16px; width:20px; height:20px; color:var(--text-muted); }
 .catalog :global(.search-field input::placeholder) { color:var(--text-muted); }
-.catalog :global(.search-field input:focus), .catalog :global(.filter-toolbar > select:focus) { border-color:var(--focus-ring); }
+.catalog :global(.search-field input:focus), .catalog :global(.filter-toolbar select:focus) { border-color:var(--focus-ring); }
 .catalog :global(.catalog-subtoolbar) { align-items:center; gap:var(--space-2); margin:var(--space-3) 0; padding-bottom:var(--space-3); }
 .catalog :global(.topic-tabs) { gap:var(--space-1); }
 .catalog :global(.topic-tabs button) { min-height:40px; padding:var(--space-1) var(--space-2); font-size:var(--text-small); line-height:var(--line-small); border-radius:var(--radius-control); color:var(--text-secondary); }
@@ -25,9 +25,12 @@
 }
 @media(max-width:620px) {
   .catalog :global(.task-grid:not(.list-view)) { grid-template-columns:minmax(0,1fr); }
-  .catalog :global(.filter-toolbar > select) { padding-inline:var(--space-1); }
+  .catalog :global(.filter-toolbar select) { padding-left:var(--space-2); }
   .catalog :global(.catalog-subtoolbar) { align-items:flex-start; }
   .catalog :global(.topic-tabs button) { padding-inline:var(--space-1); }
   .catalog :global(.view-controls) { display:none; }
   .catalog :global(.result-meta) { align-items:flex-start; flex-direction:column; }
+}
+@media(max-width:480px) {
+  .catalog :global(.filter-toolbar) { grid-template-columns:minmax(0,1fr); }
 }

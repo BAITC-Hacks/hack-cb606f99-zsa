@@ -8,9 +8,20 @@ import { ErrorNotice, Icon, LoadingState, getTaskTitle } from "./ui";
 
 export function PublishedTask({ id }: { id: string }) {
   const load = useCallback(() => taskService.getTask(id), [id]);
-  const { data: task, error, loading, retry } = useResource(load);
+  const { data: task, error, loading, refreshing, refreshError, retry } = useResource(load);
   return (
     <main id="main-content" className="container page-content">
+      {refreshError ? (
+        <div className="conflict-notice" role="status">
+          <p>Не удалось обновить карточку. Показаны предыдущие данные</p>
+          <p>{refreshError}</p>
+          <button type="button" className="btn btn-secondary btn-small" disabled={refreshing} onClick={retry}>
+            {refreshing ? "Обновляем…" : "Обновить карточку"}
+          </button>
+        </div>
+      ) : refreshing ? (
+        <LoadingState label="Обновляем карточку…" />
+      ) : null}
       {loading ? (
         <LoadingState />
       ) : error || !task ? (

@@ -1,11 +1,11 @@
 "use client";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { taskService, IS_DEMO, ApiClientError } from "@/lib/client/service";
 import { DEMO_STORAGE_KEY } from "@/lib/client/mock-service";
 import { LEVELS, errorMessage } from "@/lib/client/model";
 import { useResource } from "@/lib/client/use-resource";
 import type { TaskCard } from "@/shared/contracts";
-import { Icon, TaskTile, LoadingState, ErrorNotice, EmptyState, getTaskTitle } from "./ui";
+import { Icon, Select, TaskTile, LoadingState, ErrorNotice, EmptyState, getTaskTitle } from "./ui";
 import styles from "./catalog.module.css";
 
 function ArchiveTaskAction({
@@ -21,6 +21,20 @@ function ArchiveTaskAction({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const guard = useRef(false);
+  const controls = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const wasConfirming = useRef(false);
+
+  useEffect(() => {
+    if (confirming) {
+      wasConfirming.current = true;
+      if (!pending) cancel.current?.focus();
+    } else if (wasConfirming.current) {
+      wasConfirming.current = false;
+      trigger.current?.focus();
+    }
+  }, [confirming, pending]);
 
   async function archive() {
     if (guard.current) return;
@@ -28,7 +42,11 @@ function ArchiveTaskAction({
     setPending(true);
     setError("");
     try {
-      onArchived(await taskService.archiveTask(task.id, task.version));
+      const archived = await taskService.archiveTask(task.id, task.version);
+      const taskLink = controls.current?.closest(".task-tile")?.querySelector<HTMLAnchorElement>(".tile-title");
+      const restoreFocus = controls.current?.contains(document.activeElement) || document.activeElement === document.body;
+      onArchived(archived);
+      if (restoreFocus && taskLink?.isConnected) taskLink.focus();
     } catch (err) {
       setError(errorMessage(err));
       if (err instanceof ApiClientError &&
@@ -43,7 +61,7 @@ function ArchiveTaskAction({
   }
 
   return (
-    <div className={confirming ? "publication-area" : undefined}>
+    <div ref={controls} className={confirming ? "publication-area" : undefined}>
       {error && <ErrorNotice message={error} />}
       {confirming ? (
         <>
@@ -57,13 +75,13 @@ function ArchiveTaskAction({
               {pending && <span className="spinner" />}
               {pending ? "Архивируем…" : "В архив"}
             </button>
-            <button type="button" className="btn btn-ghost btn-small" disabled={pending} onClick={() => setConfirming(false)}>
+            <button ref={cancel} type="button" className="btn btn-ghost btn-small" disabled={pending} onClick={() => setConfirming(false)}>
               Отмена
             </button>
           </div>
         </>
       ) : (
-        <button type="button" className="text-link muted" onClick={() => { setError(""); setConfirming(true); }}>
+        <button ref={trigger} type="button" className="text-link muted" onClick={() => { setError(""); setConfirming(true); }}>
           Архивировать
         </button>
       )}
@@ -73,7 +91,7 @@ function ArchiveTaskAction({
 
 export function Catalog({ business = false }: { business?: boolean }) {
   const load = useCallback(() => taskService.listTasks(business), [business]);
-  const { data: tasks, loading, error, retry } = useResource(load);
+  const { data: tasks, loading, error, refreshError, retry } = useResource(load);
   const [search, setSearch] = useState("");
   const [topic, setTopic] = useState("Все темы");
   const [readiness, setReadiness] = useState("all");
@@ -133,6 +151,7 @@ export function Catalog({ business = false }: { business?: boolean }) {
         </p>
       )}
       {notice && <div className="success-notice" role="status"><Icon name="check" />{notice}</div>}
+      {refreshError && <ErrorNotice message={refreshError} retry={retry} />}
       <div className="filter-toolbar">
         <label className="search-field">
           <Icon name="search" />
@@ -143,7 +162,7 @@ export function Catalog({ business = false }: { business?: boolean }) {
             aria-label="Поиск задач"
           />
         </label>
-        <select
+        <Select
           aria-label="Уровень готовности"
           value={readiness}
           onChange={(event) => setReadiness(event.target.value)}
@@ -154,15 +173,15 @@ export function Catalog({ business = false }: { business?: boolean }) {
               {level.label} ({level.min}–{level.max})
             </option>
           ))}
-        </select>
-        <select
+        </Select>
+        <Select
           aria-label="Сортировка"
           value={sort}
           onChange={(event) => setSort(event.target.value)}
         >
           <option value="score">Сначала готовые</option>
           <option value="new">Сначала новые</option>
-        </select>
+        </Select>
       </div>
       <div className="catalog-subtoolbar">
         <div className="topic-tabs" aria-label="Темы задач">

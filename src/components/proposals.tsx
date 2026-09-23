@@ -23,7 +23,7 @@ export function Proposals({ id }: { id: string }) {
     ]);
     return { task, proposals, teams, milestones };
   }, [id]);
-  const { data, loading, error, retry } = useResource(load);
+  const { data, loading, error, refreshing, refreshError, retry } = useResource(load);
   const [filter, setFilter] = useState("all");
   const [busy, setBusy] = useState("");
   const [actionError, setActionError] = useState("");
@@ -124,6 +124,17 @@ export function Proposals({ id }: { id: string }) {
           {notice}
         </div>
       )}
+      {refreshError ? (
+        <div className="conflict-notice" role="status">
+          <p>Не удалось обновить отклики. Показаны предыдущие данные</p>
+          <p>{refreshError}</p>
+          <button type="button" className="btn btn-secondary btn-small" disabled={refreshing} onClick={retry}>
+            {refreshing ? "Обновляем…" : "Обновить отклики"}
+          </button>
+        </div>
+      ) : refreshing ? (
+        <LoadingState label="Обновляем отклики…" />
+      ) : null}
       <div className="proposal-list content-enter" key={filter}>
         {filtered.length ? (
           filtered.map((proposal) => {
