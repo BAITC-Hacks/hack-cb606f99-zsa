@@ -46,9 +46,9 @@ describe("AI pipeline", () => {
     vi.spyOn(provider, "buildCard").mockResolvedValue({ ...emptyTaskFields(input.initialDescription), businessContact: "invented@example.com" });
     const card = await ai.buildCard(input);
     expect(card.ai).toMatchObject({ provider: "openai", fallback: false });
-    expect(card.ai.warning).toContain("businessContact");
+    expect(card.ai.warning).toContain("Контакт бизнеса");
     expect(card.card.businessContact).toBe("");
-    vi.spyOn(provider, "analyze").mockResolvedValue({ questions: [], missingFields: [] });
+    vi.spyOn(provider, "analyze").mockResolvedValue({ questions: undefined as never, missingFields: [] });
     expect((await ai.analyze(input)).ai.fallback).toBe(true);
   });
   it("can disable fallback and report a controlled upstream failure", async () => {
@@ -93,8 +93,36 @@ describe("AI pipeline", () => {
     const result = await new AiService(provider, "openai", false).buildCard(input);
     expect(result.card.title).toBe("Пекарня");
     expect(result.card.constraints).toBe("");
-    expect(result.ai.warning).toContain("constraints");
+    expect(result.ai.warning).toContain("Ограничения");
     expect(JSON.stringify(result)).not.toContain("500000");
     expect(result.confirmedFields).toEqual([]);
+  });
+  it("recovers a requested result verbatim instead of accepting an ungrounded paraphrase", async () => {
+    const description = "На ферме график полива ведут в бумажной тетради. Агроном хочет видеть запланированные и выполненные поливы на общей доске. Исторической цифровой базы нет.";
+    const provider = new MockAiProvider();
+    vi.spyOn(provider, "buildCard").mockResolvedValue({
+      ...emptyTaskFields(description), expectedResult: "Общая доска планируемых и выполненных поливов",
+      dataAndMaterials: "Исторической цифровой базы нет.", constraints: "Бюджет 500000 тенге",
+    });
+    const ai = new AiService(provider, "openai", false);
+    const result = await ai.buildCard({ initialDescription: description });
+    expect(result.card.expectedResult).toBe("Агроном хочет видеть запланированные и выполненные поливы на общей доске.");
+    expect(result.card.dataAndMaterials).toBe("Исторической цифровой базы нет.");
+    expect(result.card.constraints).toBe("");
+    expect(result.ai.warning).toContain("Ограничения");
+    expect(result.ai.warning).not.toContain("Ожидаемый результат");
+    expect(result.confirmedFields).toEqual([]);
+    expect((await ai.buildCard({ initialDescription: description, fields: { expectedResult: "" } })).card.expectedResult).toBe("");
+    expect((await ai.buildCard({ initialDescription: description, answers: [{ field: "expectedResult", answer: "Итоговый отчёт вместо доски." }] })).card.expectedResult).toBe("Итоговый отчёт вместо доски.");
+  });
+  it.each([
+    "Нам не нужна панель и мы не планируем создавать каталог. Хотим сначала изучить проблему.",
+    "Если получим финансирование, нужен прототип приложения. Решение ещё не принято.",
+    "Каждый вечер остаётся выпечка. Хотим уменьшить списания.",
+  ])("does not invent a result when the provider leaves an ambiguous request empty: %s", async (description) => {
+    const provider = new MockAiProvider();
+    const result = await new AiService(provider, "openai", false).buildCard({ initialDescription: description });
+    expect(result.card.expectedResult).toBe("");
+    expect(result.card.constraints).toBe("");
   });
 });

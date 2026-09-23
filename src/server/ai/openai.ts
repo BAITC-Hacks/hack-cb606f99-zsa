@@ -5,17 +5,12 @@ import { TaskFieldSchema, type AnalyzeDraftRequest } from "../../shared/contract
 import { AI_SYSTEM_PROMPT, CARD_PROMPT, QUESTIONS_PROMPT } from "./prompts";
 import type { AiProvider, CardInput } from "./provider";
 import { AiOutputError } from "./errors";
+import { ExtractedFieldsSchema } from "./fields";
 
 // Keep wire schemas simple; stricter limits and grounding are checked by AiService.
 const AnalysisOutput = z.object({
+  knownFields: ExtractedFieldsSchema.describe("Сначала извлеки все явно известные сведения из initialDescription и fields."),
   questions: z.array(z.object({ id: z.string(), field: TaskFieldSchema, question: z.string(), reason: z.string() })),
-  missingFields: z.array(TaskFieldSchema),
-});
-const CardOutput = z.object({
-  title: z.string(), initialDescription: z.string(), industry: z.string(), topic: z.string(),
-  contextAndNeed: z.string(), dataAndMaterials: z.string(), expectedResult: z.string(),
-  successCriteria: z.string(), constraints: z.string(), targetUsers: z.string(),
-  businessContact: z.string(), interactionFormat: z.string(),
 });
 
 export class OpenAiProvider implements AiProvider {
@@ -39,10 +34,14 @@ export class OpenAiProvider implements AiProvider {
     return schema.parse(response.output_parsed);
   }
 
-  analyze(input: AnalyzeDraftRequest) {
-    return this.generate(AnalysisOutput, "task_questions", QUESTIONS_PROMPT, input);
+  async analyze(input: AnalyzeDraftRequest) {
+    const result = await this.generate(AnalysisOutput, "task_questions", QUESTIONS_PROMPT, input);
+    return { questions: result.questions, missingFields: [], knownFields: {
+      ...result.knownFields, initialDescription: input.initialDescription,
+    } };
   }
-  buildCard(input: CardInput) {
-    return this.generate(CardOutput, "task_card", CARD_PROMPT, input);
+  async buildCard(input: CardInput) {
+    const fields = await this.generate(ExtractedFieldsSchema, "task_card", CARD_PROMPT, input);
+    return { ...fields, initialDescription: input.initialDescription };
   }
 }

@@ -1,15 +1,15 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
   TaskCard,
   TaskCardFields,
-  AnalyzeDraftResponse,
   AiMetadata,
 } from "@/shared/contracts";
 import { taskService, IS_DEMO, ApiClientError } from "@/lib/client/service";
 import { useResource } from "@/lib/client/use-resource";
+import { builderDraftReducer, manualCardFromDraft } from "@/lib/client/builder-draft";
 import {
   EMPTY_FIELDS,
   FIELD_LABELS,
@@ -26,7 +26,7 @@ import {
 } from "@/lib/client/seeds";
 import { Icon, ScorePanel, LoadingState, ErrorNotice } from "./ui";
 
-export function EditTask({ id }: { id: string }) {
+export function EditTask({ id, publicationRetry = false }: { id: string; publicationRetry?: boolean }) {
   const load = useCallback(() => taskService.getTask(id), [id]);
   const { data, loading, error, retry } = useResource(load);
   if (loading)
@@ -56,20 +56,20 @@ export function EditTask({ id }: { id: string }) {
         </Link>
       </main>
     );
-  return <TaskBuilder key={data.id} initialTask={data} />;
+  return <TaskBuilder key={data.id} initialTask={data} publicationRetry={publicationRetry} />;
 }
 
-export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
+export function TaskBuilder({ initialTask, publicationRetry = false }: { initialTask?: TaskCard; publicationRetry?: boolean }) {
   const router = useRouter();
   const [step, setStep] = useState(initialTask ? 2 : 0);
-  const [description, setDescription] = useState(
-    initialTask?.initialDescription ?? "",
-  );
-  const [industry, setIndustry] = useState(initialTask?.industry ?? "Ритейл");
-  const [questions, setQuestions] = useState<AnalyzeDraftResponse["questions"]>(
-    [],
-  );
-  const [answers, setAnswers] = useState<Partial<Record<FieldKey, string>>>({});
+  const [draft, dispatchDraft] = useReducer(builderDraftReducer, {
+    description: initialTask?.initialDescription ?? "",
+    industry: initialTask?.industry ?? "Ритейл",
+    questions: [],
+    answers: {},
+    analysisInvalidated: false,
+  });
+  const { description, industry, questions, answers } = draft;
   const [fields, setFields] = useState<TaskCardFields>(
     initialTask ? fieldsOnly(initialTask) : EMPTY_FIELDS,
   );
@@ -79,7 +79,9 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
   const [savedTask, setSavedTask] = useState<TaskCard | undefined>(initialTask);
   const [dirty, setDirty] = useState(!initialTask);
   const [busy, setBusy] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(publicationRetry
+    ? "Карточка сохранена, но подтверждение публикации не получено. Ниже загружена актуальная версия: проверьте статус и при необходимости повторите публикацию."
+    : "");
   const [notice, setNotice] = useState("");
   const [publishConsent, setPublishConsent] = useState(false);
   const [aiMetadata, setAiMetadata] = useState<AiMetadata | null>(null);
@@ -91,7 +93,7 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
     try {
       const draft = sessionStorage.getItem("sana-start-description");
       if (draft) {
-        queueMicrotask(() => setDescription(draft));
+        queueMicrotask(() => dispatchDraft({ type: "source", description: draft }));
         sessionStorage.removeItem("sana-start-description");
       }
     } catch {
@@ -138,6 +140,23 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
     setDirty(true);
     setPublishConsent(false);
     setNotice("");
+  }
+  function updateSource(source: { description?: string; industry?: string }) {
+    dispatchDraft({ type: "source", ...source });
+    setAiMetadata(null);
+    setError("");
+    setNotice("");
+    setDirty(true);
+    setPublishConsent(false);
+  }
+  function enterManualMode() {
+    setFields(manualCardFromDraft(draft));
+    setConfirmed([]);
+    setDirty(true);
+    setAiMetadata(null);
+    setError("");
+    setPublishConsent(false);
+    setStep(2);
   }
   async function save() {
     const result = await taskService.saveTask(
@@ -224,7 +243,7 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
                     setSavedTask(latest);
                     setFields(fieldsOnly(latest));
                     setConfirmed(latest.confirmedFields);
-                    setDescription(latest.initialDescription);
+                    dispatchDraft({ type: "source", description: latest.initialDescription, industry: latest.industry });
                     setDirty(false);
                     setConflict(false);
                     setPublishConsent(false);
@@ -246,13 +265,20 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
               {notice}
             </div>
           )}
+          {step === 0 && draft.analysisInvalidated && (
+            <div className="ai-warning" role="status">
+              Описание или отрасль изменены. Старые уточнения и ответы сброшены,
+              чтобы они не попали в другую задачу. Получите вопросы заново
+              или заполните карточку вручную.
+            </div>
+          )}
           {step === 0 && (
             <form
               onSubmit={(event) => {
                 event.preventDefault();
                 void perform("Анализируем описание…", async () => {
-                  const result = await taskService.analyze(description);
-                  setQuestions(result.questions);
+                  const result = await taskService.analyze(description, { industry });
+                  dispatchDraft({ type: "analysis", questions: result.questions });
                   setAiMetadata(result.ai);
                   setStep(1);
                 });
@@ -266,10 +292,7 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
                   id="description"
                   className="description-input"
                   value={description}
-                  onChange={(event) => {
-                    setDescription(event.target.value);
-                    setDirty(true);
-                  }}
+                  onChange={(event) => updateSource({ description: event.target.value })}
                   placeholder="Например: у нас кофейня. По утрам длинные очереди, хотим сократить время ожидания…"
                   minLength={10}
                   maxLength={4000}
@@ -285,7 +308,7 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
                 <select
                   id="industry"
                   value={industry}
-                  onChange={(event) => setIndustry(event.target.value)}
+                  onChange={(event) => updateSource({ industry: event.target.value })}
                 >
                   {INDUSTRIES.map((value) => (
                     <option key={value}>{value}</option>
@@ -300,12 +323,7 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
                       <button
                         type="button"
                         key={example.label}
-                        onClick={() => {
-                          setDescription(example.text);
-                          setIndustry(example.industry);
-                          setAnswers({});
-                          setDirty(true);
-                        }}
+                        onClick={() => updateSource({ description: example.text, industry: example.industry })}
                       >
                         {example.label}
                         <Icon name="plus" size={12} />
@@ -339,20 +357,7 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
                   type="button"
                   className="text-link muted manual-entry"
                   disabled={!!busy || description.trim().length < 10}
-                  onClick={() => {
-                    setFields({
-                      ...EMPTY_FIELDS,
-                      title: description.trim().slice(0, 180),
-                      initialDescription: description.trim(),
-                      contextAndNeed: description.trim(),
-                      industry,
-                    });
-                    setConfirmed([]);
-                    setDirty(true);
-                    setAiMetadata(null);
-                    setError("");
-                    setStep(2);
-                  }}
+                  onClick={enterManualMode}
                 >
                   Заполнить карточку вручную <Icon name="arrow" size={14} />
                 </button>
@@ -392,7 +397,7 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
                   <button
                     type="button"
                     className="text-link demo-fill"
-                    onClick={() => setAnswers({ ...DEMO_ANSWERS })}
+                    onClick={() => dispatchDraft({ type: "answers", answers: DEMO_ANSWERS })}
                   >
                     <Icon name="plus" size={14} />
                     Вставить пример ответов кофейни
@@ -421,10 +426,7 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
                         rows={3}
                         value={answers[question.field] ?? ""}
                         onChange={(event) =>
-                          setAnswers((previous) => ({
-                            ...previous,
-                            [question.field]: event.target.value,
-                          }))
+                          dispatchDraft({ type: "answer", field: question.field, value: event.target.value })
                         }
                         placeholder="Ваш ответ…"
                       />
@@ -454,6 +456,14 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
                     )}
                   </button>
                 </div>
+                <button
+                  type="button"
+                  className="text-link muted manual-entry"
+                  disabled={!!busy}
+                  onClick={enterManualMode}
+                >
+                  Продолжить вручную с моими ответами <Icon name="arrow" size={14} />
+                </button>
               </fieldset>
             </form>
           )}
@@ -614,8 +624,11 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
                       disabled={!!busy || !canSave}
                       onClick={() =>
                         void perform("Сохраняем…", async () => {
-                          await save();
+                          const result = await save();
                           setNotice("Изменения сохранены.");
+                          if (!initialTask) {
+                            router.replace(`/business/tasks/${encodeURIComponent(result.id)}/edit`);
+                          }
                         })
                       }
                     >
@@ -638,10 +651,16 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
                     onClick={() =>
                       void perform("Публикуем…", async () => {
                         const result = await save();
-                        const publishedTask = await taskService.publishTask(
-                          result.id,
-                          result.version,
-                        );
+                        let publishedTask: TaskCard;
+                        try {
+                          publishedTask = await taskService.publishTask(result.id, result.version);
+                        } catch (error) {
+                          // Creation already succeeded. Even a failed publish must leave a reloadable URL.
+                          if (!initialTask) {
+                            router.replace(`/business/tasks/${encodeURIComponent(result.id)}/edit?publication=retry`);
+                          }
+                          throw error;
+                        }
                         setSavedTask(publishedTask);
                         router.push(
                           `/business/tasks/${publishedTask.id}/published`,

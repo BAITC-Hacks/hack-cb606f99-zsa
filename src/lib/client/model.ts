@@ -2,6 +2,7 @@ import type {
   TaskCard,
   TaskCardFields,
   Proposal,
+  AnalyzeDraftRequest,
   AnalyzeDraftResponse,
   BuildCardResponse,
   Readiness,
@@ -40,7 +41,10 @@ export type TaskService = {
   supportsMilestones: boolean;
   listTasks: (includeDrafts?: boolean) => Promise<TaskCard[]>;
   getTask: (id: string) => Promise<TaskCard>;
-  analyze: (description: string) => Promise<AnalyzeDraftResponse>;
+  analyze: (
+    description: string,
+    fields?: AnalyzeDraftRequest["fields"],
+  ) => Promise<AnalyzeDraftResponse>;
   generate: (input: CardInput) => Promise<BuildCardResponse>;
   saveTask: (input: SaveInput, id?: string) => Promise<TaskCard>;
   publishTask: (id: string, expectedVersion?: number) => Promise<TaskCard>;
