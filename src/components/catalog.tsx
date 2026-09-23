@@ -1,11 +1,11 @@
 "use client";
 import { useCallback, useState } from "react";
-import Link from "next/link";
 import { taskService, IS_DEMO } from "@/lib/client/service";
 import { DEMO_STORAGE_KEY } from "@/lib/client/mock-service";
 import { LEVELS } from "@/lib/client/model";
 import { useResource } from "@/lib/client/use-resource";
 import { Icon, TaskTile, LoadingState, ErrorNotice, EmptyState } from "./ui";
+import styles from "./catalog.module.css";
 
 export function Catalog({ business = false }: { business?: boolean }) {
   const load = useCallback(() => taskService.listTasks(business), [business]);
@@ -26,7 +26,7 @@ export function Catalog({ business = false }: { business?: boolean }) {
       (task) =>
         (topic === "Все темы" || (task.topic || task.industry) === topic) &&
         (readiness === "all" || task.readinessLevel === readiness) &&
-        `${task.title} ${task.contextAndNeed} ${task.industry}`
+        `${task.title} ${task.contextAndNeed || task.initialDescription} ${task.industry}`
           .toLocaleLowerCase("ru")
           .includes(search.toLocaleLowerCase("ru")),
     )
@@ -41,40 +41,22 @@ export function Catalog({ business = false }: { business?: boolean }) {
     setReadiness("all");
   };
   return (
-    <main id="main-content" className="container page-content">
+    <main id="main-content" className={`container page-content ${styles.catalog}`}>
       <div className="page-title-row">
         <div>
-          <span className="eyebrow">
-            {business ? "РАБОЧЕЕ ПРОСТРАНСТВО" : "ОТКРЫТЫЙ КАТАЛОГ"}
-          </span>
-          <h1>{business ? "Ваши задачи." : "Найдите свою задачу."}</h1>
+          <h1>{business ? "Ваши задачи" : "Каталог задач"}</h1>
           <p>
             {business
-              ? "Развивайте идеи, повышайте готовность и знакомьтесь с командами."
-              : "Реальные вызовы бизнеса. Возможности для вашей команды."}
+              ? "Черновики, публикации и отклики"
+              : "Выберите задачу бизнеса и предложите решение"}
           </p>
         </div>
-        <Link className="btn btn-white" href="/business/new">
-          <Icon name="plus" size={17} />
-          Создать задачу
-        </Link>
       </div>
       {!business && (
-        <div className="catalog-callout">
-          <span className="spark-box">
-            <Icon name="spark" />
-          </span>
-          <div>
-            <strong>Понятная задача — уверенный старт</strong>
-            <p>
-              Рейтинг показывает полноту описания. Откликнуться можно на любую
-              опубликованную задачу.
-            </p>
-          </div>
-          <Link className="text-link" href="/#how-it-works">
-            Как это работает <Icon name="arrow" size={16} />
-          </Link>
-        </div>
+        <details className="catalog-rating-note">
+          <summary>Как считается рейтинг</summary>
+          <p>Баллы за заполненные и подтверждённые сведения. Откликнуться можно на задачу с любым рейтингом</p>
+        </details>
       )}
       {IS_DEMO && business && (
         <p className="demo-info">
@@ -88,7 +70,7 @@ export function Catalog({ business = false }: { business?: boolean }) {
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Название, отрасль или ключевое слово"
+            placeholder="Поиск по задачам"
             aria-label="Поиск задач"
           />
         </label>
@@ -100,7 +82,7 @@ export function Catalog({ business = false }: { business?: boolean }) {
           <option value="all">Любая готовность</option>
           {LEVELS.map((level) => (
             <option value={level.key} key={level.key}>
-              {level.label} · {level.min}–{level.max}
+              {level.label} ({level.min}–{level.max})
             </option>
           ))}
         </select>
@@ -153,15 +135,9 @@ export function Catalog({ business = false }: { business?: boolean }) {
         <>
           <div className="result-meta">
             <span>Найдено: {filtered.length}</span>
-            <span>
-              <span className="blue-dot" />
-              {business
-                ? "Включая неопубликованные черновики"
-                : "Все команды могут откликнуться"}
-            </span>
           </div>
           {filtered.length ? (
-            <div className={`task-grid ${view === "list" ? "list-view" : ""}`}>
+            <div key={`${topic}:${readiness}:${sort}:${view}`} className={`task-grid motion-grid ${view === "list" ? "list-view" : ""}`}>
               {filtered.map((task) => (
                 <TaskTile task={task} business={business} key={task.id} />
               ))}

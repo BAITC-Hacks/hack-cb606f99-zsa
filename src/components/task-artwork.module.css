@@ -1,0 +1,47 @@
+/* A reserved copy column keeps lettering clear of the illustration. */
+.copy {
+  position: absolute;
+  z-index: 2;
+  inset: 24px auto auto 24px;
+  display: grid;
+  gap: 12px;
+  width: 58%;
+  max-width: calc(100% - 88px);
+  color: var(--text-on-art);
+  text-align: left;
+  pointer-events: none;
+}
+
+.headline {
+  display: block;
+  font-family: var(--font-manrope), "Segoe UI", sans-serif;
+  font-size: clamp(22px, 6.8cqw, 34px);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.028em;
+  white-space: pre-line;
+  text-wrap: nowrap;
+}
+
+.description {
+  display: block;
+  max-width: 22ch;
+  font-size: clamp(12px, 3.1cqw, 15px);
+  font-weight: 450;
+  line-height: 1.5;
+  letter-spacing: 0;
+  white-space: pre-line;
+  color: var(--text-on-art-muted);
+}
+
+@container (min-width: 560px) {
+  .copy { inset: 32px auto auto 32px; gap: 16px; }
+  .headline { font-size: clamp(34px, 5.6cqw, 48px); }
+  .description { font-size: 16px; }
+}
+
+@container (max-width: 280px) {
+  .copy { inset: 16px auto auto 16px; gap: 8px; max-width: calc(100% - 72px); }
+  .headline { font-size: 20px; }
+  .description { font-size: 11px; }
+}

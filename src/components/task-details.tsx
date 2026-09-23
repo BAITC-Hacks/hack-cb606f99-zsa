@@ -72,20 +72,15 @@ export function TaskDetails({ id }: { id: string }) {
   }
   return (
     <main id="main-content" className="container page-content detail-page">
-      <Link className="back-link" href="/catalog">
-        <Icon name="back" size={16} />
-        Все задачи
-      </Link>
       <div className="detail-heading">
         <div>
           <div className="inline-meta">
             <span className="eyebrow">
-              {task.industry} / {task.topic}
+              {[...new Set([task.industry, task.topic].filter(Boolean))].join(" / ")}
             </span>
             <Badge score={task.score} />
           </div>
           <h1>{task.title}</h1>
-          <p className="detail-intro">{task.contextAndNeed}</p>
           <div className="detail-meta">
             <span>
               <Icon name="users" size={16} />
@@ -125,7 +120,7 @@ export function TaskDetails({ id }: { id: string }) {
       )}
       <div className="detail-layout">
         <div>
-          <TaskArtwork industry={task.industry} />
+          <TaskArtwork task={task} detail />
           <div className="detail-sections">
             {keys.map((key) => (
               <section key={key}>
@@ -139,8 +134,7 @@ export function TaskDetails({ id }: { id: string }) {
                   )}
                 </div>
                 <p className={!task[key] ? "muted" : ""}>
-                  {task[key] ||
-                    "Пока не указано. Можно уточнить у представителя бизнеса."}
+                  {task[key] || "Не указано"}
                 </p>
               </section>
             ))}
@@ -155,7 +149,7 @@ export function TaskDetails({ id }: { id: string }) {
                 <span className="success-icon">
                   <Icon name="check" size={26} />
                 </span>
-                <h2>Предложение отправлено.</h2>
+                <h2>Предложение отправлено</h2>
                 <p>
                   Теперь бизнес сможет познакомиться с вашей идеей и принять
                   решение.
@@ -206,12 +200,9 @@ export function TaskDetails({ id }: { id: string }) {
                 }}
               >
                 <div className="form-section-title">
-                  <span className="spark-box">
-                    <Icon name="bolt" />
-                  </span>
                   <div>
-                    <h2>Ваш подход может всё изменить.</h2>
-                    <p>Расскажите, как ваша команда видит решение.</p>
+                    <h2>Предложите решение</h2>
+                    <p>Укажите план работы, сроки и состав команды</p>
                   </div>
                 </div>
                 {submitError && <ErrorNotice message={submitError} />}
@@ -225,7 +216,7 @@ export function TaskDetails({ id }: { id: string }) {
                     >
                       {teams.map((team) => (
                         <option key={team.id} value={team.id}>
-                          {team.name} · {team.skills.join(", ")}
+                          {team.name} / {team.skills.join(", ")}
                         </option>
                       ))}
                     </select>
@@ -269,7 +260,7 @@ export function TaskDetails({ id }: { id: string }) {
                     </label>
                     <label className="form-field">
                       Ссылка на прототип{" "}
-                      <span className="muted">· необязательно</span>
+                      <span className="muted">(необязательно)</span>
                       <input
                         type="url"
                         pattern="https?://.+"
@@ -283,9 +274,6 @@ export function TaskDetails({ id }: { id: string }) {
                     </label>
                   </div>
                   <div className="form-actions">
-                    <p className="small-text muted">
-                      Бизнес выбирает команду самостоятельно.
-                    </p>
                     <button className="btn btn-blue">
                       {busy ? (
                         <span className="spinner" />
@@ -306,15 +294,8 @@ export function TaskDetails({ id }: { id: string }) {
             confirmed={task.confirmedFields}
             score={task.score}
             breakdown={task.scoreBreakdown}
+            showLevel={false}
           />
-          <div className="open-access-note">
-            <Icon name="users" />
-            <p>
-              Открыто для всех команд.
-              <br />
-              Рейтинг помогает оценить готовность, но не ограничивает выбор.
-            </p>
-          </div>
         </div>
       </div>
     </main>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Icon,
@@ -16,6 +15,9 @@ import {
 import { DRAFT_EXAMPLES } from "@/lib/client/seeds";
 import { taskService } from "@/lib/client/service";
 import { useResource } from "@/lib/client/use-resource";
+import { RotatingIdeaInput } from "./rotating-idea-input";
+import { Reveal } from "./reveal";
+import styles from "./landing-preview.module.css";
 
 export function Landing() {
   const router = useRouter();
@@ -41,42 +43,21 @@ export function Landing() {
   return (
     <main id="main-content">
       <section className="hero container">
-        <div className="hero-eyebrow">
-          <span className="blue-dot" />
-          БИЗНЕС × ТАЛАНТЫ × AI
-        </div>
+        <div className="hero-eyebrow">БИЗНЕС И КОМАНДЫ</div>
         <h1>
-          Большие решения
+          Задачи бизнеса
           <br />
-          начинаются <span>с задачи.</span>
+          <span>для вашей команды</span>
         </h1>
         <div className="hero-bottom">
           <p>
-            Превратите идею в понятную задачу с AI.
-            <br />
-            Найдите команду, которая воплотит её в жизнь.
+            Опубликуйте задачу и выберите команду
           </p>
-          <div className="hero-actions">
-            <Link className="btn btn-blue" href="/business/new">
-              Создать задачу <Icon name="arrow" />
-            </Link>
-            <Link className="text-link" href="/catalog">
-              Найти свой проект <Icon name="arrow" />
-            </Link>
-          </div>
         </div>
-        <div className="product-stage">
+        <Reveal className="product-stage">
           <div className="stage-top">
-            <div className="window-dots">
-              <i />
-              <i />
-              <i />
-            </div>
-            <span>От идеи — к готовой задаче</span>
-            <span className="stage-live">
-              <span className="dot" />
-              Task Hub workspace
-            </span>
+            <span>Пример задачи</span>
+            <span className="stage-live">Task Hub</span>
           </div>
           <div className="workspace-preview">
             <aside className="preview-nav">
@@ -86,8 +67,8 @@ export function Landing() {
                 Моя задача
               </div>
               <div className="preview-nav-item">
-                <Icon name="spark" />
-                AI-помощник
+                <Icon name="file" />
+                Уточнения
               </div>
               <div className="preview-nav-item">
                 <Icon name="grid" />
@@ -102,34 +83,33 @@ export function Landing() {
                 </span>
               </div>
             </aside>
-            <div className="preview-main">
+            <div className="preview-main content-enter" key={preview}>
               <div className="preview-breadcrumb">
-                Мои задачи <Icon name="chevron" size={12} /> Новая возможность
+                Мои задачи <Icon name="chevron" size={12} /> Предзаказ в кофейне
               </div>
-              <div className="coffee-visual">
+              <div className={`coffee-visual ${styles.coffeeVisual}`}>
                 <div className="coffee-orbit" />
                 <div className="coffee-cup">
                   <span />
                   <i />
                 </div>
                 <span className="coffee-copy">
-                  Less waiting.
+                  Заказывайте
                   <br />
-                  <strong>More coffee.</strong>
+                  <strong>без очереди</strong>
                 </span>
-                <span className="coffee-number">01 / RETAIL</span>
               </div>
               <div className="preview-title">
                 <div>
-                  <span className="overline">РИТЕЙЛ · ВЕБ-ПРИЛОЖЕНИЕ</span>
+                  <span className="overline">РИТЕЙЛ / ВЕБ-ПРИЛОЖЕНИЕ</span>
                   <h2>Кофе без очереди</h2>
                 </div>
                 <Badge score={score} />
               </div>
               <p className="preview-description">
                 {preview === "after"
-                  ? "Веб-прототип предзаказа для кофейни. Меню для гостей и удобный экран очереди для бариста."
-                  : "У нас кофейня. По утрам длинные очереди, хотим сократить время ожидания заказа."}
+                  ? "Предзаказ для гостей и экран заказов для бариста"
+                  : "По утрам гости долго ждут заказ"}
               </p>
               <div className="preview-fields">
                 <div>
@@ -146,45 +126,38 @@ export function Landing() {
                 </div>
               </div>
             </div>
-            <aside className="preview-assistant">
-              <div className="assistant-title">
-                <span className="spark-box">
-                  <Icon name="spark" />
-                </span>
-                <strong>От идеи к действию</strong>
-              </div>
-              <p>
-                Каждое уточнение приближает вашу задачу к подходящей команде.
-              </p>
-              <div className="preview-score">
+            <aside className={`preview-assistant ${styles.assistant}`}>
+              <h3 className={styles.title}>Заполнение карточки</h3>
+              <div className={styles.score}>
                 <ScoreRing score={score} />
                 <span>Готовность к работе</span>
               </div>
-              <div className="preview-score-bar">
+              <div className={styles.progress} aria-hidden="true">
                 <i style={{ width: `${score}%` }} />
               </div>
-              <div className="preview-success">
-                <Icon name={preview === "after" ? "check" : "spark"} />
+              <div className={styles.status}>
+                <Icon name={preview === "after" ? "check" : "file"} />
                 <span>
                   {preview === "after"
-                    ? "Всё готово. Время найти команду."
-                    : "Есть идея. Давайте добавим детали."}
+                    ? "Все сведения подтверждены"
+                    : "Добавьте данные и требования"}
                 </span>
               </div>
               <div
-                className="preview-toggle"
+                className={styles.toggle}
+                role="group"
                 aria-label="Пример изменения рейтинга"
               >
                 <button
                   aria-pressed={preview === "before"}
-                  className={preview === "before" ? "active" : ""}
+                  type="button"
                   onClick={() => setPreview("before")}
                 >
                   До уточнения
                 </button>
                 <button
                   aria-pressed={preview === "after"}
-                  className={preview === "after" ? "active" : ""}
+                  type="button"
                   onClick={() => setPreview("after")}
                 >
                   После
@@ -192,59 +165,34 @@ export function Landing() {
               </div>
             </aside>
           </div>
-        </div>
-        <div className="hero-footnote">
-          <span>Идеям нужен первый шаг.</span>
-          <div>
-            <span>
-              <Icon name="check" size={14} />
-              Открытый каталог
-            </span>
-            <span>
-              <Icon name="check" size={14} />
-              Прозрачный рейтинг
-            </span>
-            <span>
-              <Icon name="check" size={14} />
-              Выбор за вами
-            </span>
-          </div>
-        </div>
+        </Reveal>
       </section>
       <section className="container section" id="how-it-works">
         <div className="section-heading">
           <div>
-            <span className="eyebrow">МЕНЬШЕ НЕОПРЕДЕЛЁННОСТИ</span>
+            <span className="eyebrow">КАК ЭТО РАБОТАЕТ</span>
             <h2>
-              Вы знаете свой бизнес.
+              Опишите задачу
               <br />
-              <span>AI поможет с деталями.</span>
+              <span>и получите отклики</span>
             </h2>
           </div>
-          <p>
-            От первого «а что, если» до предложения
-            <br />
-            от команды. В одном пространстве.
-          </p>
         </div>
-        <div className="how-grid">
+        <Reveal className="how-grid">
           <article>
             <span className="step-number">01</span>
             <div className="how-visual question-visual">
-              <span>«Хочу улучшить сервис…»</span>
+              <span>«В кофейне очередь по утрам»</span>
               <div>
-                <Icon name="spark" />
                 Для кого создаём решение?
               </div>
               <div>
-                <Icon name="spark" />
                 Как измерим результат?
               </div>
             </div>
-            <h3>Начните с идеи</h3>
+            <h3>Опишите проблему</h3>
             <p>
-              Расскажите о проблеме своими словами. Уточняющие вопросы помогут
-              заполнить пробелы.
+              Что не работает и что хотите изменить
             </p>
           </article>
           <article>
@@ -259,10 +207,9 @@ export function Landing() {
                 ))}
               </div>
             </div>
-            <h3>Сделайте задачу понятной</h3>
+            <h3>Заполните карточку</h3>
             <p>
-              Дополняйте карточку и повышайте её рейтинг. Каждый балл объясним,
-              каждое поле под вашим контролем.
+              Укажите данные и результат, проверьте сведения
             </p>
           </article>
           <article>
@@ -271,39 +218,35 @@ export function Landing() {
               <div className="mini-team">
                 <span className="avatar blue">Z</span>
                 <span>
-                  ZSA<small>React · AI</small>
+                  ZSA<small>React / TypeScript</small>
                 </span>
                 <Icon name="check" />
               </div>
               <div className="mini-team">
                 <span className="avatar violet">O</span>
                 <span>
-                  Orbit<small>Python · Data</small>
+                  Orbit<small>Python / SQL</small>
                 </span>
                 <span className="dim">→</span>
               </div>
             </div>
-            <h3>Найдите своих людей</h3>
+            <h3>Выберите команду</h3>
             <p>
-              Команды предлагают решения. Сравнивайте идеи и выбирайте, с кем
-              двигаться дальше.
+              Сравните планы, сроки и опыт
             </p>
           </article>
-        </div>
+        </Reveal>
       </section>
       <section className="container section">
         <div className="section-heading">
           <div>
-            <span className="eyebrow">ОТКРЫТЫЕ ВОЗМОЖНОСТИ</span>
+            <span className="eyebrow">КАТАЛОГ</span>
             <h2>
-              Задачи с настоящим
+              Задачи, открытые
               <br />
-              <span>смыслом.</span>
+              <span>для команд</span>
             </h2>
           </div>
-          <Link className="btn btn-secondary" href="/catalog">
-            Весь каталог <Icon name="arrow" />
-          </Link>
         </div>
         {loading ? (
           <LoadingState label="Находим задачи…" />
@@ -311,20 +254,20 @@ export function Landing() {
           <ErrorNotice message={error} retry={retry} />
         ) : featured.length === 0 ? (
           <EmptyState
-            title="Первая возможность за вами"
+            title="В каталоге пока нет задач"
             description="Создайте задачу, чтобы команды смогли предложить решение."
           />
         ) : (
-          <div className="task-grid">
+          <Reveal className="task-grid motion-grid">
             {featured.map((task) => (
               <TaskTile key={task.id} task={task} />
             ))}
-          </div>
+          </Reveal>
         )}
       </section>
       <section className="container start-section">
-        <span className="eyebrow">ВАША СЛЕДУЮЩАЯ ИДЕЯ</span>
-        <h2>Всё начинается здесь.</h2>
+        <span className="eyebrow">НОВАЯ ЗАДАЧА</span>
+        <h2>Что нужно сделать?</h2>
         {inputError && <ErrorNotice message={inputError} />}
         <form
           className="idea-composer"
@@ -333,21 +276,12 @@ export function Landing() {
             start();
           }}
         >
-          <label className="sr-only" htmlFor="landing-idea">
-            Опишите вашу идею
-          </label>
-          <textarea
-            id="landing-idea"
+          <RotatingIdeaInput
             value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            maxLength={4000}
-            placeholder="Какую задачу вы давно хотели решить?"
+            onChange={setDescription}
           />
-          <div>
-            <span>
-              <Icon name="spark" size={16} />
-              Task Hub · помощник бизнеса
-            </span>
+          <div className="idea-composer-footer">
+            <span>Проверьте черновик перед публикацией</span>
             <button
               className="btn btn-blue icon-button"
               aria-label="Начать создание задачи"
@@ -366,9 +300,6 @@ export function Landing() {
             </button>
           ))}
         </div>
-        <Link className="text-link muted" href="/catalog">
-          Я из команды — хочу найти задачу <Icon name="arrow" size={16} />
-        </Link>
       </section>
     </main>
   );

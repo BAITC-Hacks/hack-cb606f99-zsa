@@ -47,7 +47,7 @@ export function EditTask({ id }: { id: string }) {
   if (data.status === "archived")
     return (
       <main id="main-content" className="container page-content">
-        <h1>Задача в архиве.</h1>
+        <h1>Задача в архиве</h1>
         <p className="muted">
           Карточка и история откликов доступны для просмотра.
         </p>
@@ -173,25 +173,19 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
   const steps = ["Ваша идея", "Уточнения", "Карточка задачи"];
   return (
     <main id="main-content" className="container page-content builder-page">
-      <Link className="back-link" href="/business">
-        <Icon name="back" size={16} />
-        Мои задачи
-      </Link>
       <div className="builder-heading">
         <div>
-          <span className="eyebrow">
-            {initialTask ? "РАЗВИВАЙТЕ СВОЮ ИДЕЮ" : "ОТ ИДЕИ К ВОЗМОЖНОСТИ"}
-          </span>
+          {!initialTask && <span className="eyebrow">НОВАЯ ЗАДАЧА</span>}
           <h1 ref={heading} tabIndex={-1}>
-            {initialTask ? "Каждая деталь важна." : "Давайте начнём с идеи."}
+            {initialTask ? "Редактирование задачи" : "Опишите задачу"}
           </h1>
-          <p>Вы рассказываете о задаче. Мы помогаем сделать её понятной.</p>
+          <p>Укажите проблему, ожидаемый результат и условия работы</p>
         </div>
         <span className="private-label">
           <Icon name="file" size={15} />
           {savedTask?.status === "published"
             ? "Задача опубликована"
-            : "Публикация только с вашего согласия"}
+            : "Черновик"}
         </span>
       </div>
       <ol className="stepper">
@@ -212,9 +206,6 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
           {error && <ErrorNotice message={error} />}
           {aiMetadata?.warning && (
             <div className="ai-warning" role="status">
-              <strong>
-                {aiMetadata.fallback ? "AI временно недоступен. " : ""}
-              </strong>
               {aiMetadata.warning}
             </div>
           )}
@@ -268,15 +259,6 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
               }}
             >
               <fieldset className="panel form-panel" disabled={!!busy}>
-                <div className="form-section-title">
-                  <span className="spark-box">
-                    <Icon name="spark" />
-                  </span>
-                  <div>
-                    <h2>Какую задачу хотите решить?</h2>
-                    <p>Не нужно техническое задание. Начните со своих слов.</p>
-                  </div>
-                </div>
                 <label className="field-label" htmlFor="description">
                   Опишите потребность или проблему
                 </label>
@@ -334,8 +316,8 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
                 <div className="form-actions">
                   <span className="small-text muted">
                     {IS_DEMO
-                      ? "Демо: вопросы по шаблону, без AI-запросов"
-                      : "AI поможет уточнить детали"}
+                      ? "Деморежим: вопросы по шаблону"
+                      : "Далее — уточняющие вопросы"}
                   </span>
                   <button
                     className="btn btn-blue"
@@ -348,7 +330,7 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
                       </>
                     ) : (
                       <>
-                        Продолжить с AI <Icon name="spark" size={16} />
+                        Продолжить <Icon name="arrow" size={16} />
                       </>
                     )}
                   </button>
@@ -397,11 +379,8 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
             >
               <fieldset className="panel form-panel" disabled={!!busy}>
                 <div className="form-section-title">
-                  <span className="spark-box">
-                    <Icon name="spark" />
-                  </span>
                   <div>
-                    <h2>Добавим немного ясности</h2>
+                    <h2>Уточните детали</h2>
                     <p>
                       Ответьте на вопросы. Если пока не знаете ответ, оставьте
                       поле пустым.
@@ -484,11 +463,8 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
               disabled={!!busy || savedTask?.status === "archived"}
             >
               <div className="form-section-title">
-                <span className="spark-box">
-                  <Icon name="file" />
-                </span>
                 <div>
-                  <h2>Проверьте. Дополните. Подтвердите.</h2>
+                  <h2>Проверьте карточку</h2>
                   <p>Отметьте достоверные сведения — только они дают баллы.</p>
                 </div>
               </div>
@@ -686,8 +662,7 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
                   </button>
                 </div>
                 <p className="small-text muted">
-                  Публикация доступна с любым рейтингом. Вы сможете дополнить
-                  задачу позже.
+                  Можно опубликовать с любым рейтингом и дополнить позже
                 </p>
               </div>
             </fieldset>
@@ -704,17 +679,10 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
             />
           ) : (
             <aside className="builder-guidance">
-              <div className="guidance-orb">
-                <Icon name="spark" size={34} />
-              </div>
               <h2>
-                Хорошая задача —<br />
-                <span>половина решения.</span>
+                Что нужно<br />
+                <span>для публикации</span>
               </h2>
-              <p>
-                Поможем превратить вашу потребность в понятную возможность для
-                команды.
-              </p>
               <div className="guidance-points">
                 <span>
                   <Icon name="check" />
@@ -728,14 +696,6 @@ export function TaskBuilder({ initialTask }: { initialTask?: TaskCard }) {
                   <Icon name="check" />
                   Покажем, как повысить рейтинг
                 </span>
-              </div>
-              <div className="guidance-note">
-                <Icon name="users" />
-                <p>
-                  Решения принимаете вы.
-                  <br />
-                  Публикация и выбор команды — вручную.
-                </p>
               </div>
             </aside>
           )}

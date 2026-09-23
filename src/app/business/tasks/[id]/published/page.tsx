@@ -1,4 +1,5 @@
 import { PublishedTask } from "@/components/published-task";
+import { PageTransition } from "@/components/page-transition";
 
 export default async function PublishedTaskPage({
   params,
@@ -6,5 +7,5 @@ export default async function PublishedTaskPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <PublishedTask key={id} id={id} />;
+  return <PageTransition><PublishedTask key={id} id={id} /></PageTransition>;
 }

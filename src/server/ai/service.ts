@@ -43,16 +43,16 @@ export class AiService {
     try {
       return { result: await operation(this.provider), ai: {
         provider: this.mode, fallback: false,
-        warning: this.mode === "mock" ? "Деморежим: ответ подготовлен локальным шаблоном, без обращения к AI." : null,
+        warning: this.mode === "mock" ? "Деморежим: ответ подготовлен по локальному шаблону." : null,
       } };
     } catch (error) {
       console.warn("AI request failed", safeAiDiagnostic(error));
       if (this.mode === "mock" || !this.allowFallback) {
-        throw new AppError(502, "AI_UNAVAILABLE", "Не удалось получить корректный ответ AI. Попробуйте позже или заполните карточку вручную.");
+        throw new AppError(502, "AI_UNAVAILABLE", "Не удалось подготовить ответ. Попробуйте позже или заполните карточку вручную.");
       }
       return { result: await operation(this.mock), ai: {
         provider: "mock", fallback: true,
-        warning: "AI недоступен или вернул некорректные данные. Использован локальный деморежим; проверьте карточку вручную.",
+        warning: "Не удалось подготовить ответ. Использован локальный шаблон; проверьте карточку вручную.",
       } };
     }
   }
@@ -78,7 +78,7 @@ export class AiService {
     TaskCardFieldsSchema.partial().parse(supplied);
     const { result, ai } = await this.run(async (provider) => validateCard(input, await provider.buildCard(input)));
     if (result.rejectedFields.length) {
-      const warning = `Предложения AI для полей ${result.rejectedFields.join(", ")} не подтверждены исходным текстом и не использованы. Проверьте эти поля вручную.`;
+      const warning = `Предложения для полей ${result.rejectedFields.join(", ")} не подтверждены исходным текстом и не использованы. Проверьте эти поля вручную.`;
       ai.warning = ai.warning ? `${ai.warning} ${warning}` : warning;
     }
     return { card: result.card, confirmedFields: [], ai };

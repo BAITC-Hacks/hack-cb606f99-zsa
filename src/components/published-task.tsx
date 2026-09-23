@@ -17,7 +17,7 @@ export function PublishedTask({ id }: { id: string }) {
         <ErrorNotice message={error || "Задача не найдена."} retry={retry} />
       ) : task.status !== "published" ? (
         <div className="publish-success">
-          <h1>Это пока черновик.</h1>
+          <h1>Это пока черновик</h1>
           <p>Проверьте карточку и подтвердите публикацию.</p>
           <Link className="btn btn-blue" href={`/business/tasks/${id}/edit`}>
             Открыть редактор <Icon name="arrow" />
@@ -28,11 +28,11 @@ export function PublishedTask({ id }: { id: string }) {
           <span className="success-icon">
             <Icon name="check" size={35} />
           </span>
-          <span className="eyebrow">НОВАЯ ВОЗМОЖНОСТЬ</span>
+          <span className="eyebrow">ОПУБЛИКОВАНО</span>
           <h1>
             Ваша задача
             <br />
-            <span>уже в каталоге.</span>
+            <span>в каталоге</span>
           </h1>
           <p>
             «{task.title}» доступна всем командам.
@@ -50,9 +50,6 @@ export function PublishedTask({ id }: { id: string }) {
               Перейти к откликам
             </Link>
           </div>
-          <Link className="text-link muted" href="/business/new">
-            Создать ещё одну задачу <Icon name="arrow" />
-          </Link>
         </div>
       )}
     </main>

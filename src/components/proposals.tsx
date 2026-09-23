@@ -73,16 +73,11 @@ export function Proposals({ id }: { id: string }) {
   );
   return (
     <main id="main-content" className="container page-content proposals-page">
-      <Link href="/business" className="back-link">
-        <Icon name="back" size={16} />
-        Мои задачи
-      </Link>
       <div className="page-title-row">
         <div>
-          <span className="eyebrow">РЕШЕНИЕ ЗА ВАМИ</span>
-          <h1>Познакомьтесь с командами.</h1>
+          <h1>Предложения команд</h1>
           <p>
-            Сравните подходы. Выберите одну, несколько или ни одной команды.
+            Выберите подходящие команды
           </p>
         </div>
         <Link className="btn btn-secondary" href={`/tasks/${id}`}>
@@ -127,7 +122,7 @@ export function Proposals({ id }: { id: string }) {
           {notice}
         </div>
       )}
-      <div className="proposal-list">
+      <div className="proposal-list content-enter" key={filter}>
         {filtered.length ? (
           filtered.map((proposal) => {
             const team = teams.find((item) => item.id === proposal.teamId);
@@ -148,7 +143,7 @@ export function Proposals({ id }: { id: string }) {
                     </span>
                     <div>
                       <h2>{team?.name ?? "Команда"}</h2>
-                      <p>{team?.skills.join(" · ")}</p>
+                      <p>{team?.skills.join(", ")}</p>
                     </div>
                   </div>
                   <span className={`proposal-status ${proposal.status}`}>
@@ -189,7 +184,7 @@ export function Proposals({ id }: { id: string }) {
                   )}
                   {!!team?.technologies?.length && (
                     <span className="muted">
-                      {team.technologies.join(" · ")}
+                      {team.technologies.join(", ")}
                     </span>
                   )}
                 </div>
@@ -209,9 +204,6 @@ export function Proposals({ id }: { id: string }) {
                 >
                   {proposal.status === "pending" ? (
                     <>
-                      <span className="small-text muted">
-                        Выбирайте по идее и подходу к задаче.
-                      </span>
                       <div>
                         <button
                           className="btn btn-secondary btn-small"
@@ -241,7 +233,7 @@ export function Proposals({ id }: { id: string }) {
                                   proposal.id,
                                   "accepted",
                                 ),
-                              `Команда ${team?.name ?? ""} выбрана. Другие предложения остаются доступными.`,
+                              `Команда ${team?.name ?? ""} выбрана`,
                             )
                           }
                         >
@@ -284,7 +276,7 @@ export function Proposals({ id }: { id: string }) {
                         (milestone ? (
                           <span className="milestone-done">
                             <Icon name="check" size={15} />
-                            Этап подтверждён · +{milestone.points} баллов
+                            Этап подтверждён: +{milestone.points} баллов
                           </span>
                         ) : confirming === proposal.id ? (
                           <div className="milestone-confirm">
@@ -317,7 +309,7 @@ export function Proposals({ id }: { id: string }) {
                             disabled={!!busy}
                             onClick={() => setConfirming(proposal.id)}
                           >
-                            Подтвердить этап · +25 баллов
+                            Подтвердить этап (+25 баллов)
                           </button>
                         ))}
                     </>
@@ -331,18 +323,14 @@ export function Proposals({ id }: { id: string }) {
             title={
               proposals.length
                 ? "Здесь пока нет откликов"
-                : "Первое знакомство ещё впереди"
+                : "На задачу пока никто не откликнулся"
             }
             description={
               proposals.length
-                ? "Выберите другую вкладку, чтобы посмотреть предложения команд."
-                : "Команды увидят опубликованную задачу в каталоге и смогут предложить своё решение."
+                ? "Посмотрите другие вкладки"
+                : "Отклики появятся здесь"
             }
-          >
-            <Link className="btn btn-secondary" href={`/tasks/${id}`}>
-              Посмотреть задачу как команда <Icon name="arrow" size={16} />
-            </Link>
-          </EmptyState>
+          />
         )}
       </div>
     </main>

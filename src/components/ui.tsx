@@ -1,6 +1,9 @@
 import type { CSSProperties, ReactNode, SVGProps } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import type { TaskCard, TaskCardFields } from "@/shared/contracts";
+import { taskCover } from "@/lib/client/task-artwork";
+import artworkStyles from "./task-artwork.module.css";
 import {
   FIELD_LABELS,
   levelFor,
@@ -11,7 +14,6 @@ import {
 type IconName =
   | "arrow"
   | "arrowUp"
-  | "spark"
   | "check"
   | "plus"
   | "search"
@@ -28,12 +30,6 @@ type IconName =
 const paths: Record<IconName, ReactNode> = {
   arrow: <path d="M4 12h15m-6-6 6 6-6 6" />,
   arrowUp: <path d="M12 20V4m-6 6 6-6 6 6" />,
-  spark: (
-    <>
-      <path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z" />
-      <path d="m20 2 .5 1.5L22 4l-1.5.5L20 6l-.5-1.5L18 4l1.5-.5Z" />
-    </>
-  ),
   check: <path d="m5 12 4 4L19 6" />,
   plus: <path d="M12 5v14M5 12h14" />,
   search: (
@@ -113,7 +109,6 @@ export function Badge({ score }: { score: number }) {
   const level = levelFor(score);
   return (
     <span className={`badge level-${level.key}`}>
-      <span className="dot" />
       {level.label}
     </span>
   );
@@ -142,12 +137,14 @@ export function ScorePanel({
   confirmed,
   score,
   preview = false,
+  showLevel = true,
   breakdown,
 }: {
   fields: TaskCardFields;
   confirmed: FieldKey[];
   score: number;
   preview?: boolean;
+  showLevel?: boolean;
   breakdown?: TaskCard["scoreBreakdown"];
 }) {
   const rows = breakdown
@@ -160,15 +157,12 @@ export function ScorePanel({
   return (
     <aside className="panel score-panel">
       <div className="eyebrow">
-        Готовность задачи {preview && <span>· предпросмотр</span>}
+        Готовность задачи {preview && <span>(предпросмотр)</span>}
       </div>
       <div className="score-hero">
         <ScoreRing score={score} />
-        <Badge score={score} />
+        {showLevel && <Badge score={score} />}
       </div>
-      <p className="muted small-text">
-        Чем понятнее задача, тем выше её позиция в каталоге.
-      </p>
       <div className="score-rows">
         {rows.map((row) => (
           <div className="score-row" key={row.key}>
@@ -189,7 +183,7 @@ export function ScorePanel({
       </div>
       {rows.some((row) => !row.complete) ? (
         <div className="score-tip">
-          <Icon name="spark" />
+          <Icon name="file" />
           <p>
             Следующий шаг: заполните и подтвердите{" "}
             <strong>
@@ -205,8 +199,7 @@ export function ScorePanel({
         <div className="score-tip complete">
           <Icon name="check" />
           <p>
-            Все сведения подтверждены. Команды могут сразу приступить к
-            обсуждению.
+            Все сведения заполнены и подтверждены
           </p>
         </div>
       )}
@@ -220,13 +213,45 @@ const industryStyles: Record<string, string> = {
   Логистика: "delivery",
   Сервисы: "ai",
 };
+
+function ArtworkCopy({ headline, description }: { headline: string; description?: string }) {
+  return (
+    <div className={artworkStyles.copy}>
+      <strong className={artworkStyles.headline}>{headline}</strong>
+      {description && <span className={artworkStyles.description}>{description}</span>}
+    </div>
+  );
+}
+
 export function TaskArtwork({
-  industry,
+  task,
   compact = false,
+  detail = false,
 }: {
-  industry: string;
+  task: Pick<TaskCard, "id" | "title" | "industry">;
   compact?: boolean;
+  detail?: boolean;
 }) {
+  const { industry } = task;
+  const cover = taskCover(task);
+  if (cover) {
+    return (
+      <div aria-hidden="true" className={`task-art task-art-image cover-${cover.theme}`}>
+        <Image
+          src={cover.src}
+          alt=""
+          fill
+          sizes={detail
+            ? "(max-width: 760px) 100vw, 65vw"
+            : "(max-width: 620px) 100vw, (max-width: 1100px) 50vw, 33vw"}
+          className="task-cover-image"
+        />
+        {cover.headline && (
+          <ArtworkCopy headline={cover.headline} description={cover.description} />
+        )}
+      </div>
+    );
+  }
   const theme = industryStyles[industry] ?? "ai";
   return (
     <div
@@ -241,18 +266,17 @@ export function TaskArtwork({
         <span />
         <span />
       </div>
-      <span className="art-word">
-        {
+      <ArtworkCopy
+        headline={
           {
-            coffee: "less waiting.\nmore coffee.",
-            eco: "a greener\neveryday.",
-            study: "learn.\ncreate. repeat.",
-            delivery: "make\nyour move.",
-            ai: "a little\nmore human.",
-          }[theme]
+            coffee: "Заказы\nбез очереди",
+            eco: "Сбор\nвторсырья",
+            study: "Учебные\nпроекты",
+            delivery: "Маршруты\nдоставки",
+            ai: "Рабочие\nпроцессы",
+          }[theme] ?? "Рабочие\nпроцессы"
         }
-      </span>
-      <span className="art-caption">TASK HUB / {industry.toUpperCase()}</span>
+      />
       <span className="art-plus">+</span>
     </div>
   );
@@ -274,7 +298,7 @@ export function TaskTile({
         tabIndex={-1}
         aria-hidden="true"
       >
-        <TaskArtwork industry={task.industry} />
+        <TaskArtwork task={task} />
         <span className="art-arrow">
           <Icon name="arrow" />
         </span>
@@ -290,9 +314,11 @@ export function TaskTile({
             business ? `/business/tasks/${task.id}/edit` : `/tasks/${task.id}`
           }
         >
-          {task.title}
+          <h2>{task.title}</h2>
         </Link>
-        <p className="tile-description">{task.contextAndNeed}</p>
+        <p className="tile-description">
+          {task.contextAndNeed || task.initialDescription}
+        </p>
         <div className="tile-bottom">
           <span className="tag">{task.topic || task.industry}</span>
           <span className="tile-score">

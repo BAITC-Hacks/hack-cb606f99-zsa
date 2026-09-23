@@ -1,4 +1,5 @@
 import { Landing } from "@/components/landing";
+import { PageTransition } from "@/components/page-transition";
 export default function Home() {
-  return <Landing />;
+  return <PageTransition><Landing /></PageTransition>;
 }

@@ -1,0 +1,114 @@
+.settings {
+  position: relative;
+  flex: none;
+}
+
+.trigger {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+.trigger:hover,
+.trigger[aria-expanded="true"] {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+}
+
+.trigger:focus-visible,
+.option:has(input:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+
+.popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 16px);
+  right: 0;
+  width: min(224px, calc(100vw - 32px));
+  padding: 16px;
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-popover);
+}
+
+.options {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.options legend {
+  padding: 0;
+  margin-bottom: 16px;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-label);
+  line-height: var(--line-caption);
+  color: var(--text-secondary);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font-size: var(--text-small);
+  font-weight: 400;
+  line-height: var(--line-small);
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.option:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+}
+
+.option:has(input:checked) {
+  background: var(--bg-elevated);
+  border-color: var(--accent);
+}
+
+.option input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+@media (max-width: 620px) {
+  .popover {
+    position: fixed;
+    top: 72px;
+    right: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trigger,
+  .option {
+    transition: none;
+  }
+}

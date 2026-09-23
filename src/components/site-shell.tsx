@@ -4,8 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Icon } from "./ui";
-import { IS_DEMO, getServerStatus } from "@/lib/client/service";
-import { useResource } from "@/lib/client/use-resource";
+import { ThemeControls } from "./theme-controls";
 
 export function TaskHubLogo() {
   return (
@@ -24,7 +23,9 @@ export function TaskHubLogo() {
 
 export function SiteHeader() {
   const path = usePathname();
-  const { data: server, error } = useResource(getServerStatus);
+  const isEditingTask =
+    path === "/business/new" ||
+    /^\/business\/tasks\/[^/]+\/edit$/.test(path);
   return (
     <header className="site-header">
       <div className="nav-inner">
@@ -32,7 +33,7 @@ export function SiteHeader() {
           <TaskHubLogo />
         </Link>
         <nav className="main-nav" aria-label="Главная навигация">
-          <Link className={path === "/catalog" ? "active" : ""} href="/catalog">
+          <Link className={path === "/catalog" ? "active" : ""} aria-current={path === "/catalog" ? "page" : undefined} href="/catalog">
             Каталог задач
           </Link>
           <Link
@@ -42,38 +43,19 @@ export function SiteHeader() {
                 : ""
             }
             href="/business"
+            aria-current={path === "/business" ? "page" : undefined}
           >
             Мои задачи
           </Link>
           <Link href="/#how-it-works">Как это работает</Link>
         </nav>
         <div className="nav-actions">
-          {(IS_DEMO || server || error) && (
-            <span
-              className="demo-badge"
-              title={
-                IS_DEMO
-                  ? "Автономный режим: данные сохраняются только в браузере."
-                  : error
-                    ? error
-                    : server?.aiProvider === "mock"
-                      ? "Задачи сохраняются на сервере. AI пока работает по шаблону."
-                      : "Задачи сохраняются на сервере. Подключён OpenAI."
-              }
-            >
-              <span className="dot" />
-              {IS_DEMO
-                ? "Локальное демо"
-                : error
-                  ? "Нет связи"
-                  : server?.aiProvider === "mock"
-                    ? "AI: демо"
-                    : "AI подключён"}
-            </span>
+          <ThemeControls />
+          {!isEditingTask && (
+            <Link className="btn btn-white btn-small" href="/business/new">
+              Создать задачу <Icon name="plus" size={16} />
+            </Link>
           )}
-          <Link className="btn btn-white btn-small" href="/business/new">
-            Создать задачу <Icon name="plus" size={16} />
-          </Link>
         </div>
       </div>
     </header>
@@ -85,14 +67,8 @@ export function SiteFooter() {
       <Link className="brand" href="/" aria-label="Task Hub — главная">
         <TaskHubLogo />
       </Link>
-      <span>Реальные задачи. Новые возможности.</span>
+      <span>Задачи бизнеса и предложения команд</span>
       <div>
-        <Link href="/catalog">
-          Для команд <Icon name="arrow" size={14} />
-        </Link>
-        <Link href="/business">
-          Для бизнеса <Icon name="arrow" size={14} />
-        </Link>
         <span className="hackalem-credit">
           <span>СОЗДАНО НА ХАКАТОНЕ</span>
           <span className="hackalem-logo">
