@@ -88,7 +88,9 @@ export const TeamFieldsSchema = z.object({
   technologies: z.array(shortText.min(1)).min(1).max(20),
 });
 export const CreateTeamRequestSchema = TeamFieldsSchema.strict();
-export const TeamSchema = TeamFieldsSchema.extend({ id: IdSchema, createdAt: z.string().datetime() });
+// Team points are a read-only projection of confirmed milestones, never stored input.
+export const TeamRecordSchema = TeamFieldsSchema.extend({ id: IdSchema, createdAt: z.string().datetime() });
+export const TeamSchema = TeamRecordSchema.extend({ points: z.number().int().nonnegative() });
 export const ProposalStatusSchema = z.enum(["pending", "accepted", "rejected"]);
 export const CreateProposalRequestSchema = z.object({
   teamId: IdSchema,
@@ -117,6 +119,61 @@ export const ProposalQuerySchema = z.object({
   teamId: IdSchema.optional(),
   status: ProposalStatusSchema.optional(),
 }).strict();
+
+export const MILESTONE_POINTS = 10;
+export const MilestoneStatusSchema = z.enum(["planned", "submitted", "changes_requested", "confirmed"]);
+const evidenceUrl = z.union([
+  z.string().trim().max(2000).url().refine((url) => /^https?:\/\//i.test(url), "Нужна HTTP(S)-ссылка"),
+  z.literal(""),
+]);
+export const CreateMilestoneRequestSchema = z.object({
+  title: shortText.min(1),
+  description: text.min(1),
+}).strict();
+export const SubmitMilestoneRequestSchema = z.object({
+  report: text.min(1),
+  evidenceUrl: evidenceUrl.default(""),
+  expectedVersion: z.number().int().positive(),
+}).strict();
+export const ReviewMilestoneRequestSchema = z.object({
+  decision: z.enum(["confirm", "request_changes"]),
+  comment: text.default(""),
+  expectedVersion: z.number().int().positive(),
+}).strict().refine((value) => value.decision !== "request_changes" || value.comment.length > 0, {
+  path: ["comment"], message: "Объясните, что нужно доработать",
+});
+export const MilestoneSchema = z.object({
+  id: IdSchema,
+  proposalId: IdSchema,
+  taskId: IdSchema,
+  teamId: IdSchema,
+  title: shortText.min(1),
+  description: text.min(1),
+  points: z.literal(MILESTONE_POINTS),
+  status: MilestoneStatusSchema,
+  report: text,
+  evidenceUrl,
+  reviewComment: text,
+  version: z.number().int().positive(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  submittedAt: z.string().datetime().nullable(),
+  confirmedAt: z.string().datetime().nullable(),
+}).superRefine((milestone, context) => {
+  if (milestone.status === "planned") {
+    if (milestone.report || milestone.evidenceUrl || milestone.reviewComment || milestone.submittedAt !== null || milestone.confirmedAt !== null) {
+      context.addIssue({ code: "custom", path: ["status"], message: "Запланированный этап ещё не содержит сдачу или решение" });
+    }
+  } else if (!milestone.report || milestone.submittedAt === null) {
+    context.addIssue({ code: "custom", path: ["report"], message: "Для сданного этапа нужны отчёт и дата сдачи" });
+  }
+  if ((milestone.status === "confirmed") !== (milestone.confirmedAt !== null)) {
+    context.addIssue({ code: "custom", path: ["confirmedAt"], message: "Дата подтверждения допустима только у подтверждённого этапа" });
+  }
+  if (milestone.status === "changes_requested" && !milestone.reviewComment) {
+    context.addIssue({ code: "custom", path: ["reviewComment"], message: "Для доработки нужен комментарий бизнеса" });
+  }
+});
 
 export const ClarifyingQuestionSchema = z.object({
   id: IdSchema,
@@ -158,6 +215,8 @@ export const TeamResponseSchema = z.object({ team: TeamSchema });
 export const TeamListResponseSchema = z.object({ teams: z.array(TeamSchema), total: z.number().int() });
 export const ProposalResponseSchema = z.object({ proposal: ProposalSchema });
 export const ProposalListResponseSchema = z.object({ proposals: z.array(ProposalSchema), total: z.number().int() });
+export const MilestoneResponseSchema = z.object({ milestone: MilestoneSchema });
+export const MilestoneListResponseSchema = z.object({ milestones: z.array(MilestoneSchema), total: z.number().int() });
 export const ApiErrorSchema = z.object({ error: z.object({
   code: z.string(), message: z.string(), details: z.array(z.object({ path: z.string(), message: z.string() })),
 }) });
@@ -171,9 +230,15 @@ export type CreateTaskRequest = z.input<typeof CreateTaskRequestSchema>;
 export type UpdateTaskRequest = z.input<typeof UpdateTaskRequestSchema>;
 export type TaskQuery = z.input<typeof TaskQuerySchema>;
 export type Team = z.infer<typeof TeamSchema>;
+export type TeamRecord = z.infer<typeof TeamRecordSchema>;
 export type CreateTeamRequest = z.input<typeof CreateTeamRequestSchema>;
 export type Proposal = z.infer<typeof ProposalSchema>;
 export type CreateProposalRequest = z.input<typeof CreateProposalRequestSchema>;
+export type MilestoneStatus = z.infer<typeof MilestoneStatusSchema>;
+export type Milestone = z.infer<typeof MilestoneSchema>;
+export type CreateMilestoneRequest = z.input<typeof CreateMilestoneRequestSchema>;
+export type SubmitMilestoneRequest = z.input<typeof SubmitMilestoneRequestSchema>;
+export type ReviewMilestoneRequest = z.input<typeof ReviewMilestoneRequestSchema>;
 export type AnalyzeDraftRequest = z.infer<typeof AnalyzeDraftRequestSchema>;
 export type AnalyzeDraftResponse = z.infer<typeof AnalyzeDraftResponseSchema>;
 export type BuildCardRequest = z.input<typeof BuildCardRequestSchema>;

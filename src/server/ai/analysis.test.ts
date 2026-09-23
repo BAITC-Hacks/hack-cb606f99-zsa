@@ -64,4 +64,22 @@ describe("analysis reconciles model suggestions with source facts", () => {
     const result = await new AiService(provider(known), "openai", false).analyze({ initialDescription: description });
     expect(result.missingFields).toContain("targetUsers");
   });
+  it("asks neutral clarifications for unsafe values, ignoring assumptions inside model questions", async () => {
+    const description = "Нам не нужен каталог. Есть CSV? Доступ ещё обсуждается.";
+    const known = { ...emptyTaskFields(description), expectedResult: "нужен каталог", dataAndMaterials: "Есть CSV" };
+    const upstream = provider(known);
+    vi.spyOn(upstream, "analyze").mockResolvedValue({ knownFields: known, missingFields: [], questions: [
+      { id: "1", field: "constraints", question: "Как потратите согласованные 500000 тенге за 2 недели?", reason: "Бюджет уже известен" },
+      { id: "2", field: "dataAndMaterials", question: "Пришлите обещанный CSV", reason: "CSV существует" },
+      { id: "3", field: "expectedResult", question: "Какой каталог сделаем?", reason: "Каталог выбран" },
+    ] });
+    const result = await new AiService(upstream, "openai", false).analyze({ initialDescription: description });
+    expect(result.missingFields).toEqual(expect.arrayContaining(["expectedResult", "dataAndMaterials"]));
+    expect(result.questions.map((question) => question.field)).toEqual(expect.arrayContaining(["expectedResult", "dataAndMaterials"]));
+    const text = result.questions.map((question) => `${question.question} ${question.reason}`).join(" ");
+    expect(text).not.toContain("500000");
+    expect(text).not.toContain("обещанный CSV");
+    expect(text).not.toContain("Каталог выбран");
+    expect(result.ai.warning).toContain("неоднозначны");
+  });
 });

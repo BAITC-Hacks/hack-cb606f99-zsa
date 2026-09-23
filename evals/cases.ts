@@ -57,4 +57,39 @@ export const AI_CASES: AiCase[] = [
     known: { contextAndNeed: /списаниях/iu, dataAndMaterials: /нет/iu },
     absent: ["expectedResult", "successCriteria", "businessContact", "interactionFormat"],
   },
+  {
+    id: "question-is-not-data",
+    input: { initialDescription: "Есть CSV? Ответ: данных нет. Нам не нужен каталог. Итоговый формат ещё обсуждается. Нужно сократить время обработки заявок." },
+    known: { dataAndMaterials: /нет/iu },
+    absent: ["expectedResult", "successCriteria", "businessContact", "interactionFormat"],
+  },
+  {
+    id: "cancelled-result",
+    input: { initialDescription: "Заявки бизнеса теряются в переписке. Нужен каталог заявок. Позже от этой идеи отказались. Новый результат ещё не выбран. Данных нет." },
+    known: { contextAndNeed: /заявки|заявок/iu, dataAndMaterials: /нет/iu },
+    absent: ["expectedResult", "successCriteria", "businessContact", "interactionFormat"],
+  },
+  {
+    id: "conflicting-data-sources",
+    input: { initialDescription: "Заявки обрабатываются вручную. Один представитель сообщает: Есть CSV заказов. Другой представитель сообщает: CSV нет. Противоречие пока не разрешено. Нужна панель заявок." },
+    known: { contextAndNeed: /заявки|заявок/iu, expectedResult: /панель/iu },
+    absent: ["dataAndMaterials", "successCriteria", "businessContact", "interactionFormat"],
+  },
+  {
+    id: "explicit-answer-overrides",
+    input: {
+      initialDescription: "Нам не нужен каталог. Данных нет. Срок 2 недели.",
+      fields: { expectedResult: "Каталог заявок после пересмотра решения.", dataAndMaterials: "Теперь доступен CSV за 6 месяцев.", constraints: "Новый срок 4 недели." },
+      answers: [{ field: "constraints", answer: "Последнее решение: срок 5 недель." }],
+    },
+    known: { expectedResult: /Каталог заявок/iu, dataAndMaterials: /CSV за 6 месяцев/iu, constraints: /недел/iu },
+    absent: ["successCriteria", "businessContact", "interactionFormat"],
+    exact: { constraints: "Последнее решение: срок 5 недель." },
+  },
+  {
+    id: "conditional-data-english",
+    input: { initialDescription: "Customers call to ask about repair progress. We need a status page. If access is granted, CSV is available. Access approval is still pending." },
+    known: { contextAndNeed: /repair|Customers/iu, expectedResult: /status page/iu },
+    absent: ["dataAndMaterials", "successCriteria", "businessContact", "interactionFormat"],
+  },
 ];

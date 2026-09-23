@@ -6,6 +6,10 @@ import type {
   AnalyzeDraftResponse,
   BuildCardResponse,
   Readiness,
+  Milestone,
+  CreateMilestoneRequest,
+  SubmitMilestoneRequest,
+  ReviewMilestoneRequest,
 } from "@/shared/contracts";
 import { READINESS_LEVELS, SCORING_DIMENSIONS } from "@/shared/scoring";
 
@@ -32,11 +36,7 @@ export type SaveInput = {
   confirmedFields: FieldKey[];
   expectedVersion?: number;
 };
-export type Milestone = {
-  proposalId: string;
-  points: number;
-  confirmedAt: string;
-};
+export type { Milestone };
 export type TaskService = {
   supportsMilestones: boolean;
   listTasks: (includeDrafts?: boolean) => Promise<TaskCard[]>;
@@ -58,7 +58,9 @@ export type TaskService = {
     decisionComment?: string,
   ) => Promise<Proposal>;
   listMilestones: (taskId: string) => Promise<Milestone[]>;
-  confirmMilestone: (proposalId: string) => Promise<Milestone>;
+  createMilestone: (proposalId: string, input: CreateMilestoneRequest) => Promise<Milestone>;
+  submitMilestone: (id: string, input: SubmitMilestoneRequest) => Promise<Milestone>;
+  reviewMilestone: (id: string, input: ReviewMilestoneRequest) => Promise<Milestone>;
 };
 
 export const FIELD_LABELS: Record<FieldKey, string> = {

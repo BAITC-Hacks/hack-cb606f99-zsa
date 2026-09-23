@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
-import { TaskFieldSchema, type AnalyzeDraftRequest } from "../../shared/contracts";
+import { type AnalyzeDraftRequest } from "../../shared/contracts";
 import { AI_SYSTEM_PROMPT, CARD_PROMPT, QUESTIONS_PROMPT } from "./prompts";
 import type { AiProvider, CardInput } from "./provider";
 import { AiOutputError } from "./errors";
@@ -10,7 +10,6 @@ import { ExtractedFieldsSchema } from "./fields";
 // Keep wire schemas simple; stricter limits and grounding are checked by AiService.
 const AnalysisOutput = z.object({
   knownFields: ExtractedFieldsSchema.describe("Сначала извлеки все явно известные сведения из initialDescription и fields."),
-  questions: z.array(z.object({ id: z.string(), field: TaskFieldSchema, question: z.string(), reason: z.string() })),
 });
 
 export class OpenAiProvider implements AiProvider {
@@ -36,7 +35,7 @@ export class OpenAiProvider implements AiProvider {
 
   async analyze(input: AnalyzeDraftRequest) {
     const result = await this.generate(AnalysisOutput, "task_questions", QUESTIONS_PROMPT, input);
-    return { questions: result.questions, missingFields: [], knownFields: {
+    return { questions: [], missingFields: [], knownFields: {
       ...result.knownFields, initialDescription: input.initialDescription,
     } };
   }

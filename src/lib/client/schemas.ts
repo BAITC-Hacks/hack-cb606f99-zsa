@@ -3,6 +3,7 @@ import {
   TaskCardFieldsSchema,
   TaskCardSchema,
   ProposalSchema,
+  MilestoneSchema,
 } from "@/shared/contracts";
 import { readinessPreview } from "./model";
 
@@ -31,12 +32,24 @@ export const TeamSchema = z.object({
   technologies: z.array(z.string()).optional(),
   points: z.number().nonnegative(),
 });
-export const MilestoneSchema = z.object({
+export const LegacyMilestoneSchema = z.object({
   proposalId: z.string(),
   points: z.number().nonnegative(),
   confirmedAt: z.string().datetime(),
-});
-export const DemoDatabaseSchema = z.object({
+}).strict();
+export const DemoDatabaseSchema = z.preprocess((value) => {
+  if (!value || typeof value !== "object" || !("milestones" in value) || !Array.isArray(value.milestones)) return value;
+  if ("legacyMilestones" in value && !Array.isArray(value.legacyMilestones)) return value;
+  const legacy = value.milestones.filter((item) => !MilestoneSchema.safeParse(item).success && LegacyMilestoneSchema.safeParse(item).success);
+  return {
+    ...value,
+    milestones: value.milestones.filter((item) => !legacy.includes(item)),
+    legacyMilestones: [
+      ...("legacyMilestones" in value && Array.isArray(value.legacyMilestones) ? value.legacyMilestones : []),
+      ...legacy,
+    ],
+  };
+}, z.object({
   version: z.literal(1),
   tasks: z.array(TaskViewSchema),
   proposals: z.array(
@@ -53,7 +66,9 @@ export const DemoDatabaseSchema = z.object({
   ),
   teams: z.array(TeamSchema),
   milestones: z.array(MilestoneSchema),
-});
+  // Preserve old one-click demo awards as history, not as evidence-backed new milestones.
+  legacyMilestones: z.array(LegacyMilestoneSchema).default([]),
+}));
 export function parseResponse<T>(schema: z.ZodType<T>, data: unknown): T {
   const result = schema.safeParse(data);
   if (!result.success)

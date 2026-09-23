@@ -58,6 +58,38 @@ export class JsonRepository implements Repository {
     });
   }
 
+  /** Probe the real lock and storage directory without rewriting application records. */
+  async checkReadiness(): Promise<Database> {
+    try {
+      await this.read();
+      return await this.locked(async () => {
+        const database = await this.load();
+        // Opening r+ checks access to the existing file, but does not truncate or write it.
+        const existing = await open(this.filePath, "r+");
+        await existing.close();
+        const probe = `${this.filePath}.${randomUUID()}.health-probe`;
+        const renamed = `${probe}.renamed`;
+        try {
+          const file = await open(probe, "wx", 0o600);
+          try {
+            await file.writeFile("readiness", "utf8");
+            await file.sync();
+          } finally { await file.close(); }
+          await rename(probe, renamed);
+          if (await readFile(renamed, "utf8") !== "readiness") throw new Error("Storage probe mismatch");
+        } finally {
+          for (const path of [probe, renamed]) {
+            await unlink(path).catch((error) => { if (!hasCode(error, "ENOENT")) throw error; });
+          }
+        }
+        return database;
+      });
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError(503, "STORAGE_UNAVAILABLE", "Хранилище недоступно для чтения или записи. Проверьте диск и права доступа.");
+    }
+  }
+
   async transaction<T>(change: (database: Database) => T): Promise<T> {
     return this.locked(async () => {
       let database: Database;

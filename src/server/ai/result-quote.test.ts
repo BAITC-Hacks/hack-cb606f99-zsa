@@ -7,6 +7,8 @@ describe("explicit desired-result quote recovery", () => {
     ["Музей вручную собирает отзывы. Нужен отчёт с распределением отзывов по темам.", "Нужен отчёт с распределением отзывов по темам."],
     ["Заявки теряются в переписке. Хотим получить прототип приложения для регистрации заявок.", "Хотим получить прототип приложения для регистрации заявок."],
     ["Для центра требуется каталог доступных секций!", "Для центра требуется каталог доступных секций!"],
+    ["Users call the service center. We need a status page. If approved, CSV is available.", "We need a status page."],
+    ["Staff need a dashboard to monitor orders.", "Staff need a dashboard to monitor orders."],
   ])("copies a complete unchanged source sentence: %s", (source, expected) => {
     expect(explicitResultQuote(source)).toBe(expected);
     expect(source).toContain(expected);
@@ -29,6 +31,10 @@ describe("explicit desired-result quote recovery", () => {
     "Нужна консультация по существующему каталогу.",
     "Нужно досконально изучить процесс и сократить расходы.",
     "Нужна ботаническая экспертиза растения.",
+    "We do not need a dashboard.",
+    "If approved, we need a status page.",
+    "We need a report. That idea was cancelled.",
+    "We want to improve customer satisfaction.",
   ])("does not guess a deliverable from ambiguity, rejection or a general goal: %s", (source) => {
     expect(explicitResultQuote(source)).toBeUndefined();
   });
