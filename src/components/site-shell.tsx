@@ -73,7 +73,6 @@ export function SiteFooter() {
       <Link className="brand" href="/" aria-label="Task Hub — главная">
         <TaskHubLogo />
       </Link>
-      <span>Задачи бизнеса и предложения команд</span>
       <div>
         <span className="hackalem-credit">
           <span>СОЗДАНО НА ХАКАТОНЕ</span>

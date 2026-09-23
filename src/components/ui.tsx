@@ -102,7 +102,7 @@ export function Select({ children, ...props }: ComponentProps<"select">) {
   return (
     <span className="select-control">
       <select {...props}>{children}</select>
-      <Icon name="chevronDown" size={16} className="select-chevron" />
+      <Icon name="chevronDown" size={20} strokeWidth={2} className="select-chevron" />
     </span>
   );
 }
