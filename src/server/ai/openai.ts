@@ -4,6 +4,7 @@ import { z } from "zod";
 import { TaskFieldSchema, type AnalyzeDraftRequest } from "../../shared/contracts";
 import { AI_SYSTEM_PROMPT, CARD_PROMPT, QUESTIONS_PROMPT } from "./prompts";
 import type { AiProvider, CardInput } from "./provider";
+import { AiOutputError } from "./errors";
 
 // Keep wire schemas simple; stricter limits and grounding are checked by AiService.
 const AnalysisOutput = z.object({
@@ -34,7 +35,7 @@ export class OpenAiProvider implements AiProvider {
       ],
       text: { format: zodTextFormat(schema, name) },
     });
-    if (response.status !== "completed" || !response.output_parsed) throw new Error("AI_INCOMPLETE_RESPONSE");
+    if (response.status !== "completed" || !response.output_parsed) throw new AiOutputError("INCOMPLETE_RESPONSE");
     return schema.parse(response.output_parsed);
   }
 

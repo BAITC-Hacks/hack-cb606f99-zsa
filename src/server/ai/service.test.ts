@@ -36,7 +36,7 @@ describe("AI pipeline", () => {
     await expect(ai.buildCard({ ...input, answers: [{ field: "title", answer: "x".repeat(201) }] })).rejects.toThrow();
     expect(spy).not.toHaveBeenCalled();
   });
-  it("falls back on unavailable, refused and malformed output without leaking secrets", async () => {
+  it("falls back on provider errors, while discarding unsupported facts with a warning", async () => {
     const provider = new MockAiProvider();
     vi.spyOn(provider, "analyze").mockRejectedValue(new Error("secret-api-key"));
     const ai = new AiService(provider, "openai");
@@ -45,7 +45,8 @@ describe("AI pipeline", () => {
     expect(JSON.stringify(result)).not.toContain("secret-api-key");
     vi.spyOn(provider, "buildCard").mockResolvedValue({ ...emptyTaskFields(input.initialDescription), businessContact: "invented@example.com" });
     const card = await ai.buildCard(input);
-    expect(card.ai.fallback).toBe(true);
+    expect(card.ai).toMatchObject({ provider: "openai", fallback: false });
+    expect(card.ai.warning).toContain("businessContact");
     expect(card.card.businessContact).toBe("");
     vi.spyOn(provider, "analyze").mockResolvedValue({ questions: [], missingFields: [] });
     expect((await ai.analyze(input)).ai.fallback).toBe(true);
@@ -61,5 +62,39 @@ describe("AI pipeline", () => {
     const result = await new AiService(provider, "openai").buildCard({ ...input, fields: { title: "Моя задача" } });
     expect(result.card.title).toBe("Моя задача");
     expect(result.ai.provider).toBe("openai");
+  });
+  it("preserves the stated problem when extraction omits context, without confirming it", async () => {
+    const provider = new MockAiProvider();
+    vi.spyOn(provider, "buildCard").mockResolvedValue(emptyTaskFields(input.initialDescription));
+    const ai = new AiService(provider, "openai", false);
+    const result = await ai.buildCard(input);
+    expect(result.card.contextAndNeed).toBe(input.initialDescription);
+    expect(result.confirmedFields).toEqual([]);
+    expect(result.ai).toMatchObject({ provider: "openai", fallback: false });
+    const cleared = await ai.buildCard({ ...input, fields: { contextAndNeed: "" } });
+    expect(cleared.card.contextAndNeed).toBe("");
+  });
+  it("recovers original quotes when the model changes capitalization or final punctuation", async () => {
+    const description = "Родители ищут кружки. Есть таблица с адресами.";
+    const provider = new MockAiProvider();
+    vi.spyOn(provider, "buildCard").mockResolvedValue({
+      ...emptyTaskFields(description), targetUsers: "родители.", dataAndMaterials: "Таблица с адресами",
+    });
+    const result = await new AiService(provider, "openai", false).buildCard({ initialDescription: description });
+    expect(result.card.targetUsers).toBe("Родители");
+    expect(result.card.dataAndMaterials).toBe("таблица с адресами");
+    expect(result.ai.warning).toBeNull();
+  });
+  it("keeps valid fields even when another suggestion invents a budget", async () => {
+    const provider = new MockAiProvider();
+    vi.spyOn(provider, "buildCard").mockResolvedValue({
+      ...emptyTaskFields(input.initialDescription), title: "Пекарня", constraints: "Бюджет 500000 тенге",
+    });
+    const result = await new AiService(provider, "openai", false).buildCard(input);
+    expect(result.card.title).toBe("Пекарня");
+    expect(result.card.constraints).toBe("");
+    expect(result.ai.warning).toContain("constraints");
+    expect(JSON.stringify(result)).not.toContain("500000");
+    expect(result.confirmedFields).toEqual([]);
   });
 });

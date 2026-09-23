@@ -1,22 +1,34 @@
 import {
   AnalysisSchema, AnalyzeDraftRequestSchema, BuildCardRequestSchema, TaskCardFieldsSchema,
-  type AiMetadata, type AnalyzeDraftResponse, type BuildCardResponse, type TaskCardFields,
+  type AiMetadata, type AnalyzeDraftResponse, type BuildCardResponse, type TaskCardFields, type TaskField,
 } from "../../shared/contracts";
 import { AppError } from "../errors";
 import { MockAiProvider } from "./mock";
+import { AiOutputError, safeAiDiagnostic } from "./errors";
+import { sourceQuote } from "./grounding";
 import type { AiProvider, CardInput } from "./provider";
 
-function validateCard(input: CardInput, result: unknown): TaskCardFields {
+function validateCard(input: CardInput, result: unknown): { card: TaskCardFields; rejectedFields: TaskField[] } {
   const card = TaskCardFieldsSchema.parse(result);
   const sources = [input.initialDescription, ...Object.values(input.fields ?? {}), ...input.answers.map((answer) => answer.answer)];
-  for (const [field, value] of Object.entries(card)) {
-    if (value && !sources.some((source) => source.includes(value))) throw new Error(`UNGROUNDED_FIELD:${field}`);
-  }
   // Explicit user edits and answers always win over model output.
   Object.assign(card, input.fields);
   for (const { field, answer } of input.answers) card[field] = answer;
   card.initialDescription = input.initialDescription;
-  return TaskCardFieldsSchema.parse(card);
+  const rejectedFields: TaskField[] = [];
+  for (const field of Object.keys(card) as TaskField[]) {
+    if (!card[field]) continue;
+    const quote = sourceQuote(card[field], sources);
+    if (quote === undefined) rejectedFields.push(field);
+    card[field] = quote ?? "";
+  }
+  // Preserve the source problem if extraction omitted it, without inventing a summary.
+  // An explicitly cleared user field is still respected.
+  if (!card.contextAndNeed && input.fields?.contextAndNeed === undefined &&
+      !input.answers.some((answer) => answer.field === "contextAndNeed")) {
+    card.contextAndNeed = input.initialDescription.slice(0, 5000);
+  }
+  return { card: TaskCardFieldsSchema.parse(card), rejectedFields };
 }
 
 export class AiService {
@@ -33,7 +45,8 @@ export class AiService {
         provider: this.mode, fallback: false,
         warning: this.mode === "mock" ? "Деморежим: ответ подготовлен локальным шаблоном, без обращения к AI." : null,
       } };
-    } catch {
+    } catch (error) {
+      console.warn("AI request failed", safeAiDiagnostic(error));
       if (this.mode === "mock" || !this.allowFallback) {
         throw new AppError(502, "AI_UNAVAILABLE", "Не удалось получить корректный ответ AI. Попробуйте позже или заполните карточку вручную.");
       }
@@ -50,7 +63,7 @@ export class AiService {
       const analysis = AnalysisSchema.parse(await provider.analyze(input));
       if (new Set(analysis.questions.map((question) => question.id)).size !== analysis.questions.length ||
           new Set(analysis.questions.map((question) => question.question.toLocaleLowerCase("ru"))).size !== analysis.questions.length) {
-        throw new Error("DUPLICATE_QUESTIONS");
+        throw new AiOutputError("DUPLICATE_QUESTIONS");
       }
       return { ...analysis, missingFields: [...new Set(analysis.missingFields)] };
     });
@@ -64,6 +77,10 @@ export class AiService {
     for (const { field, answer } of input.answers) supplied[field] = answer;
     TaskCardFieldsSchema.partial().parse(supplied);
     const { result, ai } = await this.run(async (provider) => validateCard(input, await provider.buildCard(input)));
-    return { card: result, confirmedFields: [], ai };
+    if (result.rejectedFields.length) {
+      const warning = `Предложения AI для полей ${result.rejectedFields.join(", ")} не подтверждены исходным текстом и не использованы. Проверьте эти поля вручную.`;
+      ai.warning = ai.warning ? `${ai.warning} ${warning}` : warning;
+    }
+    return { card: result.card, confirmedFields: [], ai };
   }
 }
