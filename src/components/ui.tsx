@@ -127,18 +127,26 @@ export function Badge({ score }: { score: number }) {
 export function ScoreRing({
   score,
   small = false,
+  showMaximum = true,
 }: {
   score: number;
   small?: boolean;
+  showMaximum?: boolean;
 }) {
   return (
     <div
       className={`score-ring ${small ? "small" : ""}`}
       style={{ "--score": `${score}%` } as CSSProperties}
+      role="meter"
+      aria-label="Готовность задачи"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={score}
+      aria-valuetext={`${score} из 100`}
     >
       <div>
         <strong>{score}</strong>
-        {!small && <span>из 100</span>}
+        {!small && showMaximum && <span>из 100</span>}
       </div>
     </div>
   );

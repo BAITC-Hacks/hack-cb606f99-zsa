@@ -98,8 +98,8 @@ export function HowItWorks() {
             <aside className={`preview-assistant ${styles.assistant}`}>
               <h3 className={styles.title}>Заполнение карточки</h3>
               <div className={styles.score}>
-                <ScoreRing score={score} />
-                <span>Готовность к работе</span>
+                <ScoreRing score={score} showMaximum={false} />
+                <span>из 100 баллов</span>
               </div>
               <div className={styles.progress} aria-hidden="true">
                 <i style={{ width: `${score}%` }} />

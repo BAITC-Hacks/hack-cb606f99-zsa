@@ -31,12 +31,6 @@
   letter-spacing: 0;
 }
 
-.score :global(.score-ring) span {
-  margin-top: var(--space-1);
-  font-size: var(--text-caption);
-  line-height: var(--line-caption);
-}
-
 .score > span {
   color: var(--text-secondary);
   font-size: var(--text-caption);
