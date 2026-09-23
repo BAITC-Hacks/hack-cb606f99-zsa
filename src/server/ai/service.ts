@@ -6,6 +6,7 @@ import { AppError } from "../errors";
 import { MockAiProvider } from "./mock";
 import { AiOutputError, safeAiDiagnostic } from "./errors";
 import { sourceQuote } from "./grounding";
+import { explicitResultQuote } from "./result-quote";
 import { relevantQuestions } from "./questions";
 import { FIELD_LABELS } from "./fields";
 import { z } from "zod";
@@ -26,6 +27,18 @@ function validateCard(input: CardInput, result: unknown): { card: TaskCardFields
     const quote = sourceQuote(card[field], sources);
     if (quote === undefined) rejectedFields.push(field);
     card[field] = quote ?? "";
+  }
+  // Recover an explicit desired artifact if the model omitted it or paraphrased
+  // it into an ungrounded value. Do not infer a deliverable from a general goal,
+  // and never override a user edit (including an intentionally empty field).
+  if (!card.expectedResult && input.fields?.expectedResult === undefined &&
+      !input.answers.some((answer) => answer.field === "expectedResult")) {
+    const quote = explicitResultQuote(input.initialDescription);
+    if (quote) {
+      card.expectedResult = quote;
+      const rejectedIndex = rejectedFields.indexOf("expectedResult");
+      if (rejectedIndex !== -1) rejectedFields.splice(rejectedIndex, 1);
+    }
   }
   // Preserve the source problem if extraction omitted it, without inventing a summary.
   // An explicitly cleared user field is still respected.

@@ -65,6 +65,22 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("frontend to backend integration", () => {
+  it("sends selected industry with analysis and does not ask for it again", async () => {
+    const description = "В кофейне большие очереди. Хотим улучшить обслуживание гостей.";
+    const withoutFields = await httpService.analyze(description);
+    expect(withoutFields.missingFields).toContain("industry");
+
+    const analysis = await httpService.analyze(description, { industry: "Ритейл" });
+    const [, init] = vi.mocked(fetch).mock.calls.at(-1)!;
+    expect(JSON.parse(String(init?.body))).toEqual({
+      initialDescription: description,
+      fields: { industry: "Ритейл" },
+    });
+    expect(analysis.missingFields).not.toContain("industry");
+    expect(analysis.questions.some((question) => question.field === "industry")).toBe(false);
+    expect(analysis.questions.length).toBeGreaterThanOrEqual(3);
+  });
+
   it("maps AI answers, preserves metadata, publishes and makes manual decisions", async () => {
     const description = "Пекарне нужен простой учёт непроданной выпечки";
     const analysis = await httpService.analyze(description);

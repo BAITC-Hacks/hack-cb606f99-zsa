@@ -97,4 +97,32 @@ describe("AI pipeline", () => {
     expect(JSON.stringify(result)).not.toContain("500000");
     expect(result.confirmedFields).toEqual([]);
   });
+  it("recovers a requested result verbatim instead of accepting an ungrounded paraphrase", async () => {
+    const description = "На ферме график полива ведут в бумажной тетради. Агроном хочет видеть запланированные и выполненные поливы на общей доске. Исторической цифровой базы нет.";
+    const provider = new MockAiProvider();
+    vi.spyOn(provider, "buildCard").mockResolvedValue({
+      ...emptyTaskFields(description), expectedResult: "Общая доска планируемых и выполненных поливов",
+      dataAndMaterials: "Исторической цифровой базы нет.", constraints: "Бюджет 500000 тенге",
+    });
+    const ai = new AiService(provider, "openai", false);
+    const result = await ai.buildCard({ initialDescription: description });
+    expect(result.card.expectedResult).toBe("Агроном хочет видеть запланированные и выполненные поливы на общей доске.");
+    expect(result.card.dataAndMaterials).toBe("Исторической цифровой базы нет.");
+    expect(result.card.constraints).toBe("");
+    expect(result.ai.warning).toContain("Ограничения");
+    expect(result.ai.warning).not.toContain("Ожидаемый результат");
+    expect(result.confirmedFields).toEqual([]);
+    expect((await ai.buildCard({ initialDescription: description, fields: { expectedResult: "" } })).card.expectedResult).toBe("");
+    expect((await ai.buildCard({ initialDescription: description, answers: [{ field: "expectedResult", answer: "Итоговый отчёт вместо доски." }] })).card.expectedResult).toBe("Итоговый отчёт вместо доски.");
+  });
+  it.each([
+    "Нам не нужна панель и мы не планируем создавать каталог. Хотим сначала изучить проблему.",
+    "Если получим финансирование, нужен прототип приложения. Решение ещё не принято.",
+    "Каждый вечер остаётся выпечка. Хотим уменьшить списания.",
+  ])("does not invent a result when the provider leaves an ambiguous request empty: %s", async (description) => {
+    const provider = new MockAiProvider();
+    const result = await new AiService(provider, "openai", false).buildCard({ initialDescription: description });
+    expect(result.card.expectedResult).toBe("");
+    expect(result.card.constraints).toBe("");
+  });
 });

@@ -92,10 +92,13 @@ export const httpService: TaskService = {
       TaskResponseSchema,
       await request(`/api/tasks/${encodeURIComponent(id)}`),
     ).task,
-  analyze: async (initialDescription) =>
+  analyze: async (initialDescription, fields) =>
     parseResponse(
       AnalyzeDraftResponseSchema,
-      await request("/api/ai/questions", "POST", { initialDescription }),
+      await request("/api/ai/questions", "POST", {
+        initialDescription,
+        ...(fields === undefined ? {} : { fields }),
+      }),
     ),
   generate: async ({ initialDescription, industry, answers }) =>
     parseResponse(

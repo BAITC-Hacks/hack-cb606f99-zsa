@@ -224,7 +224,7 @@ Base URL: `/api` в том же Next.js-приложении. Отдельный
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | Отправлять JSON с нужным заголовком |
 | 422 | `EMPTY_CONFIRMATION`, `REVIEW_REQUIRED`, `TITLE_REQUIRED` | Заполнить/подтвердить необходимые поля |
 | 502 | `AI_UNAVAILABLE` | Повторить позже или заполнить вручную |
-| 503 | `STORAGE_BUSY`, `STORAGE_INVALID` | Сообщить о недоступности хранилища |
+| 503 | `STORAGE_BUSY`, `STORAGE_INVALID`, `STORAGE_LOCK_INVALID` | Сообщить о недоступности хранилища; неизвестная блокировка требует проверки владельцем сервера |
 | 500 | `INTERNAL_ERROR` | Показать общую ошибку и возможность повторить |
 
 ## Пример вызова из frontend

@@ -75,13 +75,15 @@ export const mockService: TaskService = {
     await delay();
     return findTask(read(), id);
   },
-  async analyze(description) {
+  async analyze(description, fields) {
     await delay();
-    if (
-      !AnalyzeDraftRequestSchema.safeParse({ initialDescription: description })
-        .success
-    )
-      throw new Error("Опишите задачу подробнее: минимум 10 символов.");
+    const parsed = AnalyzeDraftRequestSchema.safeParse({
+      initialDescription: description,
+      fields,
+    });
+    if (!parsed.success)
+      throw new Error("Проверьте описание задачи (минимум 10 символов) и заполненные поля.");
+    const knownFields = { ...EMPTY_FIELDS, ...parsed.data.fields };
     const questions: AnalyzeDraftResponse["questions"] = [
       {
         id: "users",
@@ -127,9 +129,24 @@ export const mockService: TaskService = {
         reason: "Например, короткий созвон раз в неделю.",
       },
     ];
+    const missingQuestions = questions.filter(
+      (question) => !knownFields[question.field]?.trim(),
+    );
+    const selectedQuestions = [...missingQuestions];
+    // A complete card still gets three optional reviews, not requests to repeat facts.
+    for (const question of questions) {
+      if (selectedQuestions.length >= 3) break;
+      const knownValue = knownFields[question.field]?.trim();
+      if (!knownValue) continue;
+      selectedQuestions.push({
+        ...question,
+        question: `Проверка: уже указано «${knownValue.slice(0, 200)}»; нужно ли дополнить? Если да, укажите полную исправленную формулировку.`,
+        reason: "Сведения уже известны. Если правок нет, ответ можно пропустить.",
+      });
+    }
     return {
-      questions,
-      missingFields: questions.map((question) => question.field),
+      questions: selectedQuestions,
+      missingFields: missingQuestions.map((question) => question.field),
       ai: {
         provider: "mock",
         fallback: false,

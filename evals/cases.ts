@@ -45,4 +45,16 @@ export const AI_CASES: AiCase[] = [
     known: { contextAndNeed: /полив/iu, expectedResult: /доске/iu, dataAndMaterials: /нет/iu, targetUsers: /агроном/iu },
     absent: ["successCriteria", "constraints", "businessContact", "interactionFormat"],
   },
+  {
+    id: "museum-stated-deliverable",
+    input: { initialDescription: "Музей вручную собирает отзывы посетителей. Нужен отчёт с распределением отзывов по темам. Пользователи — сотрудники музея. Исторических данных нет." },
+    known: { contextAndNeed: /отзыв/iu, expectedResult: /отчёт/iu, targetUsers: /сотрудники музея/iu, dataAndMaterials: /нет/iu },
+    absent: ["successCriteria", "constraints", "businessContact", "interactionFormat"],
+  },
+  {
+    id: "rejected-deliverables",
+    input: { initialDescription: "Пекарня теряет деньги на списаниях. Мы не хотим панель и не планируем создавать каталог. Формат результата ещё не выбран. Данных пока нет." },
+    known: { contextAndNeed: /списаниях/iu, dataAndMaterials: /нет/iu },
+    absent: ["expectedResult", "successCriteria", "businessContact", "interactionFormat"],
+  },
 ];

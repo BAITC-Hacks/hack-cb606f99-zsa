@@ -36,6 +36,50 @@ const proposal = {
 };
 
 describe("frontend demo flow", () => {
+  it("respects known fields during analysis in offline mode", async () => {
+    const analysis = await resolve(mockService.analyze(DEMO_DESCRIPTION, {
+      industry: "Ритейл",
+      expectedResult: "Экран очереди для бариста",
+    }));
+    expect(analysis.questions.some((question) => question.field === "industry")).toBe(false);
+    expect(analysis.questions.some((question) => question.field === "expectedResult")).toBe(false);
+    expect(analysis.missingFields).not.toContain("expectedResult");
+    expect(analysis.questions.length).toBeGreaterThanOrEqual(3);
+  });
+  it("provides optional reviews when known fields cover all offline questions", async () => {
+    const analysis = await resolve(mockService.analyze(DEMO_DESCRIPTION, {
+      industry: "Ритейл",
+      targetUsers: "Бариста",
+      dataAndMaterials: "CSV меню",
+      expectedResult: "Экран очереди",
+      successCriteria: "Заказ виден сразу после оплаты",
+      constraints: "Две недели",
+      businessContact: "coffee@example.com",
+      interactionFormat: "Созвон каждую пятницу",
+    }));
+    expect(analysis.missingFields).toEqual([]);
+    expect(analysis.questions).toHaveLength(3);
+    expect(analysis.questions.every((question) => question.question.startsWith("Проверка: уже указано"))).toBe(true);
+  });
+  it.each([undefined, "", "   "])("treats optional or blank known fields (%j) as missing", async (value) => {
+    const analysis = await resolve(mockService.analyze(DEMO_DESCRIPTION, {
+      industry: "Ритейл",
+      targetUsers: value,
+      dataAndMaterials: "CSV меню",
+      expectedResult: value,
+      successCriteria: "Заказ виден сразу после оплаты",
+      constraints: "Две недели",
+      businessContact: "coffee@example.com",
+      interactionFormat: "Созвон каждую пятницу",
+    }));
+    expect(analysis.missingFields).toEqual(["targetUsers", "expectedResult"]);
+    expect(analysis.questions).toHaveLength(3);
+    expect(analysis.questions.slice(0, 2).map((question) => question.field)).toEqual([
+      "targetUsers", "expectedResult",
+    ]);
+    expect(analysis.questions[2].question).toContain("Проверка: уже указано «CSV меню»");
+  });
+
   it("keeps missing answers empty and never invents facts", async () => {
     const result = await resolve(
       mockService.generate({

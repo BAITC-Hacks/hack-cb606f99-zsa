@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { setTimeout } from "node:timers/promises";
 import { AppError } from "../errors";
 import { DatabaseSchema, type Database, type Repository } from "./database";
+import { withFileLock } from "./file-lock";
 import { createSeed } from "./seed";
 
 function hasCode(error: unknown, code: string) {
@@ -43,21 +43,7 @@ export class JsonRepository implements Repository {
 
   private async locked<T>(operation: () => Promise<T>): Promise<T> {
     await mkdir(dirname(this.filePath), { recursive: true });
-    const lockPath = `${this.filePath}.lock`;
-    const deadline = Date.now() + 5000;
-    let lock;
-    while (!lock) {
-      try { lock = await open(lockPath, "wx", 0o600); }
-      catch (error) {
-        if (!hasCode(error, "EEXIST")) throw error;
-        if (Date.now() >= deadline) {
-          throw new AppError(503, "STORAGE_BUSY", "Хранилище занято. Повторите запрос позже.");
-        }
-        await setTimeout(20);
-      }
-    }
-    try { return await operation(); }
-    finally { await lock.close(); await unlink(lockPath); }
+    return withFileLock(`${this.filePath}.lock`, operation);
   }
 
   async read(): Promise<Database> {

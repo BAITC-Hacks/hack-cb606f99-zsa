@@ -38,4 +38,30 @@ describe("analysis reconciles model suggestions with source facts", () => {
     expect(result.questions.length).toBeGreaterThanOrEqual(3);
     expect(result.ai.provider).toBe("openai");
   });
+  it("does not repeat a known requested result when the model paraphrases or omits it", async () => {
+    const description = "На ферме график полива ведут в бумажной тетради. Агроном хочет видеть запланированные и выполненные поливы на общей доске. Исторической цифровой базы нет.";
+    for (const suggestion of ["", "Общая доска планируемых и выполненных поливов"]) {
+      const known = { ...emptyTaskFields(description), expectedResult: suggestion, dataAndMaterials: "Исторической цифровой базы нет." };
+      const result = await new AiService(provider(known), "openai", false).analyze({ initialDescription: description });
+      expect(result.missingFields).not.toContain("expectedResult");
+      expect(result.questions.some((question) => question.field === "expectedResult")).toBe(false);
+      expect(result.missingFields).not.toContain("dataAndMaterials");
+      expect(result.missingFields).toContain("successCriteria");
+    }
+  });
+  it.each([
+    ["Посетители не могут найти свободный зал. Нужен каталог залов.", "Посетители не могут найти свободный зал."],
+    ["Директор заказал систему для операторов. Они будут обрабатывать заявки.", "операторов"],
+  ])("accepts a user role or its complete source sentence without requiring a label: %s", async (description, targetUsers) => {
+    const known = { ...emptyTaskFields(description), targetUsers };
+    const result = await new AiService(provider(known), "openai", false).analyze({ initialDescription: description });
+    expect(result.missingFields).not.toContain("targetUsers");
+    expect(result.questions.some((question) => question.field === "targetUsers")).toBe(false);
+  });
+  it("continues rejecting invented qualifications instead of loosely matching a user role", async () => {
+    const description = "Клиенты ищут доставку для семьи. Нужен каталог услуг доставки.";
+    const known = { ...emptyTaskFields(description), targetUsers: "Клиенты с семьями" };
+    const result = await new AiService(provider(known), "openai", false).analyze({ initialDescription: description });
+    expect(result.missingFields).toContain("targetUsers");
+  });
 });
