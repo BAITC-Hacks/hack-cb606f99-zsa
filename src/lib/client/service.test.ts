@@ -41,7 +41,9 @@ beforeEach(() => {
             : ai.buildCard(body);
         if (parts[1] === "teams") return platform.listTeams();
         if (parts[1] === "proposals")
-          return platform.decideProposal(parts[2], body);
+          return parts[3] === "milestones" ? platform.createMilestone(parts[2], body) : platform.decideProposal(parts[2], body);
+        if (parts[1] === "milestones")
+          return parts[3] === "submit" ? platform.submitMilestone(parts[2], body) : platform.reviewMilestone(parts[2], body);
         if (parts[1] === "tasks") {
           if (!parts[2])
             return method === "POST"
@@ -51,6 +53,7 @@ beforeEach(() => {
             return platform.publishTask(parts[2], body);
           if (parts[3] === "archive")
             return platform.archiveTask(parts[2], body);
+          if (parts[3] === "milestones") return platform.listMilestones(parts[2]);
           if (parts[3] === "proposals")
             return method === "POST"
               ? platform.createProposal(parts[2], body)
@@ -174,7 +177,30 @@ describe("frontend to backend integration", () => {
       (await httpService.decideProposal(proposal.id, "rejected")).status,
     ).toBe("rejected");
     expect((await httpService.listProposals(task.id))[0].id).toBe(proposal.id);
-    expect(httpService.supportsMilestones).toBe(false);
+    expect(httpService.supportsMilestones).toBe(true);
+  });
+
+  it("maps the real milestone workflow and only returns points after confirmed reports", async () => {
+    const proposal = (await httpService.listProposals("task-1"))[0];
+    await httpService.decideProposal(proposal.id, "accepted");
+    const before = (await httpService.listTeams()).find((team) => team.id === proposal.teamId)!.points;
+    const planned = await httpService.createMilestone(proposal.id, { title: "Прототип", description: "Показать работающий сценарий учёта" });
+    expect(planned.status).toBe("planned");
+    expect((await httpService.listMilestones("task-1")).some((item) => item.id === planned.id)).toBe(true);
+    await expect(httpService.reviewMilestone(planned.id, { decision: "confirm", expectedVersion: planned.version })).rejects.toMatchObject({ code: "MILESTONE_STATE_CONFLICT" });
+    const submitted = await httpService.submitMilestone(planned.id, { report: "Сценарий собран и проверен", evidenceUrl: "https://example.com/demo", expectedVersion: planned.version });
+    expect(submitted.status).toBe("submitted");
+    expect((await httpService.listTeams()).find((team) => team.id === proposal.teamId)!.points).toBe(before);
+    await expect(httpService.reviewMilestone(planned.id, { decision: "confirm", expectedVersion: planned.version })).rejects.toMatchObject({ code: "VERSION_CONFLICT" });
+    const changes = await httpService.reviewMilestone(planned.id, { decision: "request_changes", comment: "Добавить пустое состояние", expectedVersion: submitted.version });
+    expect(changes.status).toBe("changes_requested");
+    const resubmitted = await httpService.submitMilestone(planned.id, { report: "Пустое состояние добавлено", expectedVersion: changes.version });
+    expect(resubmitted.evidenceUrl).toBe("");
+    const confirmed = await httpService.reviewMilestone(planned.id, { decision: "confirm", expectedVersion: resubmitted.version });
+    expect(confirmed.status).toBe("confirmed");
+    expect(confirmed.points).toBe(10);
+    await httpService.reviewMilestone(planned.id, { decision: "confirm", expectedVersion: resubmitted.version });
+    expect((await httpService.listTeams()).find((team) => team.id === proposal.teamId)!.points).toBe(before! + 10);
   });
 
   it("sends optimistic versions and preserves an intervening server edit", async () => {

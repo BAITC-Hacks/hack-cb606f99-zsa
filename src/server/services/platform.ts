@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
-  ArchiveTaskRequestSchema, CreateProposalRequestSchema, CreateTaskRequestSchema,
+  ArchiveTaskRequestSchema, CreateMilestoneRequestSchema, CreateProposalRequestSchema, CreateTaskRequestSchema,
   CreateTeamRequestSchema, DecideProposalRequestSchema, IdSchema, ProposalQuerySchema,
-  PublishTaskRequestSchema, TASK_FIELDS, TaskQuerySchema, UpdateTaskRequestSchema,
-  emptyTaskFields, type TaskCardFields, type TaskField, type TaskRecord,
+  PublishTaskRequestSchema, ReviewMilestoneRequestSchema, SubmitMilestoneRequestSchema,
+  MILESTONE_POINTS, TASK_FIELDS, TaskQuerySchema, UpdateTaskRequestSchema,
+  emptyTaskFields, type Milestone, type TaskCardFields, type TaskField, type TaskRecord, type TeamRecord,
 } from "../../shared/contracts";
 import { taskCard } from "../domain/readiness";
 import { AppError, notFound } from "../errors";
@@ -12,6 +13,27 @@ import type { Database, Repository } from "../repositories/database";
 function findTask(database: Database, id: string) {
   IdSchema.parse(id);
   return database.tasks.find((task) => task.id === id) ?? notFound("Задача");
+}
+function findMilestone(database: Database, id: string) {
+  IdSchema.parse(id);
+  return database.milestones.find((milestone) => milestone.id === id) ?? notFound("Этап");
+}
+function activeProposal(database: Database, id: string) {
+  IdSchema.parse(id);
+  const proposal = database.proposals.find((item) => item.id === id) ?? notFound("Заявка");
+  if (findTask(database, proposal.taskId).status !== "published") {
+    throw new AppError(409, "TASK_NOT_PUBLISHED", "Работа с этапами доступна только для опубликованной задачи.");
+  }
+  if (proposal.status !== "accepted") {
+    throw new AppError(409, "PROPOSAL_NOT_ACCEPTED", "Сначала бизнес должен выбрать команду.");
+  }
+  return proposal;
+}
+function teamWithPoints(database: Database, team: TeamRecord) {
+  // Confirmations are the ledger: no stored team total or client-supplied award is trusted.
+  const points = database.milestones.filter((item) => item.teamId === team.id && item.status === "confirmed")
+    .reduce((total) => total + MILESTONE_POINTS, 0);
+  return { ...team, points };
 }
 function checkVersion(task: TaskRecord, expectedVersion?: number) {
   if (expectedVersion !== undefined && task.version !== expectedVersion) {
@@ -23,7 +45,7 @@ function validateConfirmations(fields: TaskCardFields, confirmed: TaskField[]) {
   if (empty.length) throw new AppError(422, "EMPTY_CONFIRMATION", "Нельзя подтвердить пустые поля.",
     empty.map((field) => ({ path: `confirmedFields.${field}`, message: "Сначала заполните поле" })));
 }
-function touch(task: TaskRecord) {
+function touch(task: Pick<TaskRecord, "version" | "updatedAt">) {
   task.version += 1;
   task.updatedAt = new Date().toISOString();
 }
@@ -110,14 +132,16 @@ export class PlatformService {
   }
 
   async listTeams() {
-    const { teams } = await this.repository.read();
+    const database = await this.repository.read();
+    const teams = database.teams.map((team) => teamWithPoints(database, team));
     return { teams, total: teams.length };
   }
 
   async getTeam(id: string) {
     IdSchema.parse(id);
-    const { teams } = await this.repository.read();
-    return { team: teams.find((team) => team.id === id) ?? notFound("Команда") };
+    const database = await this.repository.read();
+    const team = database.teams.find((team) => team.id === id) ?? notFound("Команда");
+    return { team: teamWithPoints(database, team) };
   }
 
   async createTeam(input: unknown) {
@@ -125,7 +149,7 @@ export class PlatformService {
     return this.repository.transaction((database) => {
       const team = { ...fields, id: randomUUID(), createdAt: new Date().toISOString() };
       database.teams.push(team);
-      return { team };
+      return { team: teamWithPoints(database, team) };
     });
   }
 
@@ -164,6 +188,72 @@ export class PlatformService {
       }
       Object.assign(proposal, decision, { updatedAt: new Date().toISOString(), decidedAt: new Date().toISOString() });
       return { proposal };
+    });
+  }
+
+  async listMilestones(taskId: string) {
+    const database = await this.repository.read();
+    findTask(database, taskId);
+    const milestones = database.milestones.filter((item) => item.taskId === taskId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+    return { milestones, total: milestones.length };
+  }
+
+  async createMilestone(proposalId: string, input: unknown) {
+    const fields = CreateMilestoneRequestSchema.parse(input);
+    return this.repository.transaction((database) => {
+      const proposal = activeProposal(database, proposalId);
+      const timestamp = new Date().toISOString();
+      const milestone: Milestone = {
+        ...fields, id: randomUUID(), proposalId, taskId: proposal.taskId, teamId: proposal.teamId,
+        points: MILESTONE_POINTS, status: "planned", report: "", evidenceUrl: "", reviewComment: "",
+        version: 1, createdAt: timestamp, updatedAt: timestamp, submittedAt: null, confirmedAt: null,
+      };
+      database.milestones.push(milestone);
+      return { milestone };
+    });
+  }
+
+  async submitMilestone(id: string, input: unknown) {
+    const request = SubmitMilestoneRequestSchema.parse(input);
+    return this.repository.transaction((database) => {
+      const milestone = findMilestone(database, id);
+      activeProposal(database, milestone.proposalId);
+      if (milestone.version !== request.expectedVersion) {
+        throw new AppError(409, "VERSION_CONFLICT", "Этап уже изменён. Загрузите его заново.");
+      }
+      if (milestone.status !== "planned" && milestone.status !== "changes_requested") {
+        throw new AppError(409, "MILESTONE_STATE_CONFLICT", "На проверку можно отправить только запланированный этап или доработку.");
+      }
+      milestone.report = request.report;
+      milestone.evidenceUrl = request.evidenceUrl;
+      milestone.reviewComment = "";
+      milestone.status = "submitted";
+      milestone.submittedAt = new Date().toISOString();
+      touch(milestone);
+      return { milestone };
+    });
+  }
+
+  async reviewMilestone(id: string, input: unknown) {
+    const request = ReviewMilestoneRequestSchema.parse(input);
+    return this.repository.transaction((database) => {
+      const milestone = findMilestone(database, id);
+      activeProposal(database, milestone.proposalId);
+      // A repeated confirmation, including a retry with the submitted version, is a no-op.
+      // The confirmed record itself awards points exactly once; there is no incrementing balance.
+      if (milestone.status === "confirmed" && request.decision === "confirm") return { milestone };
+      if (milestone.version !== request.expectedVersion) {
+        throw new AppError(409, "VERSION_CONFLICT", "Этап уже изменён. Загрузите его заново.");
+      }
+      if (milestone.status !== "submitted") {
+        throw new AppError(409, "MILESTONE_STATE_CONFLICT", "Бизнес может проверить только сданный этап.");
+      }
+      milestone.status = request.decision === "confirm" ? "confirmed" : "changes_requested";
+      milestone.reviewComment = request.comment;
+      milestone.confirmedAt = request.decision === "confirm" ? new Date().toISOString() : null;
+      touch(milestone);
+      return { milestone };
     });
   }
 }

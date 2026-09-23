@@ -7,30 +7,19 @@ import {
   ProposalResponseSchema,
   ProposalListResponseSchema,
   ApiErrorSchema,
+  MilestoneResponseSchema,
+  MilestoneListResponseSchema,
 } from "@/shared/contracts";
 import { z } from "zod";
-import { FIELD_LABELS, type FieldKey, type TaskService } from "./model";
+import { type TaskService } from "./model";
 import { mockService } from "./mock-service";
 import { parseResponse } from "./schemas";
+import { ApiClientError } from "./api-error";
+export { ApiClientError } from "./api-error";
 
 // Live backend is the default. Offline mode must be selected explicitly.
 export const IS_DEMO = process.env.NEXT_PUBLIC_DATA_MODE === "mock";
 const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
-
-export class ApiClientError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-    public details: { path: string; message: string }[] = [],
-  ) {
-    const hints = details.map(
-      ({ path, message }) =>
-        `${FIELD_LABELS[path as FieldKey] ?? path}: ${message}`,
-    );
-    super([message, ...hints].join(" "));
-    this.name = "ApiClientError";
-  }
-}
 
 async function request(
   path: string,
@@ -81,7 +70,7 @@ async function request(
 }
 
 export const httpService: TaskService = {
-  supportsMilestones: false,
+  supportsMilestones: true,
   listTasks: async (all) =>
     parseResponse(
       TaskListResponseSchema,
@@ -167,14 +156,22 @@ export const httpService: TaskService = {
         { status, ...(decisionComment === undefined ? {} : { decisionComment }) },
       ),
     ).proposal,
-  // No corresponding endpoints exist yet; the UI gates these offline-only features.
-  listMilestones: async () => [],
-  confirmMilestone: async () => {
-    throw new ApiClientError(
-      "UNSUPPORTED",
-      "Подтверждение этапов пока недоступно.",
-    );
-  },
+  listMilestones: async (taskId) => parseResponse(
+    MilestoneListResponseSchema,
+    await request(`/api/tasks/${encodeURIComponent(taskId)}/milestones`),
+  ).milestones,
+  createMilestone: async (proposalId, input) => parseResponse(
+    MilestoneResponseSchema,
+    await request(`/api/proposals/${encodeURIComponent(proposalId)}/milestones`, "POST", input),
+  ).milestone,
+  submitMilestone: async (id, input) => parseResponse(
+    MilestoneResponseSchema,
+    await request(`/api/milestones/${encodeURIComponent(id)}/submit`, "POST", input),
+  ).milestone,
+  reviewMilestone: async (id, input) => parseResponse(
+    MilestoneResponseSchema,
+    await request(`/api/milestones/${encodeURIComponent(id)}/review`, "POST", input),
+  ).milestone,
 };
 
 const HealthSchema = z.object({

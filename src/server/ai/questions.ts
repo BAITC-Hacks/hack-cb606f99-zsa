@@ -24,17 +24,15 @@ const REVIEWS: { field: TaskField; question: string }[] = [
   { field: "targetUsers", question: "нужно ли добавить отдельный сценарий использования? Если да, дополните полный текст о пользователях." },
 ];
 
-export function relevantQuestions(proposed: Question[], card: TaskCardFields, missingFields: TaskField[]): Question[] {
+export function relevantQuestions(card: TaskCardFields, missingFields: TaskField[]): Question[] {
   const missing = new Set(missingFields);
   const context = (card.title || card.initialDescription).slice(0, 100);
   const selected: Omit<Question, "id">[] = [];
-  const textSeen = new Set<string>();
   for (const field of PRIORITY.filter((field) => missing.has(field)).slice(0, 8)) {
-    const candidate = proposed.find((item) => item.field === field && !textSeen.has(item.question.toLocaleLowerCase("ru")));
+    // Model-written questions can contain unsupported budgets, deadlines or other
+    // assumptions even when their field is valid. Only neutral server text is shown.
     const [question, reason] = QUESTIONS[field]!;
-    const item = candidate ?? { field, question: `Для задачи «${context}»: ${question}`, reason };
-    selected.push(item);
-    textSeen.add(item.question.toLocaleLowerCase("ru"));
+    selected.push({ field, question: `Для задачи «${context}»: ${question}`, reason });
   }
   // Complete cards still need three useful checks, without asking users to re-enter known facts.
   for (const review of REVIEWS) {

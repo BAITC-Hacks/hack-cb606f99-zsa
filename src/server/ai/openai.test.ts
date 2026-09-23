@@ -36,7 +36,7 @@ describe("OpenAI adapter", () => {
     expect(result.ai).toMatchObject({ provider: "mock", fallback: true });
     expect(result.questions.length).toBeGreaterThanOrEqual(3);
   });
-  it("extracts known facts together with questions while preserving the public response shape", async () => {
+  it("extracts known facts, leaving neutral questions to the server without changing the public response", async () => {
     parse.mockResolvedValue({ status: "completed", output_parsed: {
       knownFields: { ...emptyTaskFields(input.initialDescription), contextAndNeed: input.initialDescription },
       questions: [],
@@ -47,5 +47,6 @@ describe("OpenAI adapter", () => {
     expect(response.missingFields).not.toContain("contextAndNeed");
     expect(response).not.toHaveProperty("knownFields");
     expect(parse).toHaveBeenCalledTimes(1);
+    expect(parse.mock.calls[0][0].text.format.schema.properties).not.toHaveProperty("questions");
   });
 });

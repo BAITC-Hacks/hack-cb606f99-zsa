@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -60,6 +60,16 @@ try {
   await ready();
   const health = await call("/api/health");
   assert.deepEqual(health.counts, { tasks: 5, teams: 5, proposals: 5 });
+  assert.deepEqual(health.checks, { storage: "read_write_ok", ai: "not_checked" });
+  // Reads may still work while writes are blocked; readiness must not stay green.
+  const legacyLock = join(directory, "db.json.lock");
+  await writeFile(legacyLock, "", { flag: "wx" });
+  try {
+    const unavailable = await call("/api/health", "GET", undefined, 503);
+    assert.equal(unavailable.error.code, "STORAGE_LOCK_INVALID");
+    assert.equal((await call("/api/tasks")).total, 4);
+  } finally { await unlink(legacyLock); }
+  assert.equal((await call("/api/health")).status, "ok");
   assert.equal((await call("/api/tasks")).total, 4);
   assert.equal((await call("/api/tasks?status=all")).total, 5);
   assert.equal((await call("/api/tasks?readinessLevel=draft")).tasks[0].score, 20);
@@ -102,11 +112,48 @@ try {
   const submission = { teamId: team.team.id, solutionIdea: "Панель прогноза", plan: "Данные, прототип, тест", estimatedDuration: "2 недели", prototypeUrl: "https://example.com/demo" };
   const first = await call(`${path}/proposals`, "POST", submission, 201);
   const second = await call(`${path}/proposals`, "POST", { ...submission, teamId: "team-2" }, 201);
+  const milestoneUrl = `/api/proposals/${first.proposal.id}/milestones`;
+  const milestoneInput = { title: "Прототип прогноза", description: "Передать работающий прогноз на тестовом CSV и описать проверку точности" };
+  await call(milestoneUrl, "POST", milestoneInput, 409);
   for (const { proposal } of [first, second]) await call(`/api/proposals/${proposal.id}/status`, "PATCH", { status: "accepted" });
   assert.equal((await call(`${path}/proposals?status=accepted`)).total, 2);
   assert.equal((await call(`/api/proposals?teamId=${team.team.id}`)).total, 1);
+
+  // Team progress is a separate, manually reviewed workflow, never an award for acceptance alone.
+  assert.equal((await call(`/api/teams/${team.team.id}`)).team.points, 0);
+  await call(milestoneUrl, "POST", { ...milestoneInput, points: 999 }, 400);
+  const planned = (await call(milestoneUrl, "POST", milestoneInput, 201)).milestone;
+  assert.equal(planned.status, "planned");
+  assert.equal(planned.points, 10);
+  const milestonePath = `/api/milestones/${planned.id}`;
+  await call(`${milestonePath}/review`, "POST", { decision: "confirm", expectedVersion: planned.version }, 409);
+  await call(`${milestonePath}/submit`, "POST", { report: "", expectedVersion: planned.version }, 400);
+  const submitted = (await call(`${milestonePath}/submit`, "POST", {
+    report: "Подготовили прототип и проверили прогноз на CSV", evidenceUrl: "https://example.com/prototype", expectedVersion: planned.version,
+  })).milestone;
+  assert.equal((await call(`/api/teams/${team.team.id}`)).team.points, 0);
+  await call(`${milestonePath}/review`, "POST", { decision: "request_changes", expectedVersion: submitted.version }, 400);
+  const returned = (await call(`${milestonePath}/review`, "POST", {
+    decision: "request_changes", comment: "Добавьте сравнение с базовым прогнозом", expectedVersion: submitted.version,
+  })).milestone;
+  assert.equal(returned.status, "changes_requested");
+  await call(`${milestonePath}/submit`, "POST", { report: "Устаревшая форма", expectedVersion: submitted.version }, 409);
+  const resubmitted = (await call(`${milestonePath}/submit`, "POST", {
+    report: "Добавили сравнение с базовым прогнозом и результаты теста", expectedVersion: returned.version,
+  })).milestone;
+  const confirmed = (await call(`${milestonePath}/review`, "POST", {
+    decision: "confirm", expectedVersion: resubmitted.version,
+  })).milestone;
+  assert.equal(confirmed.status, "confirmed");
+  await call(`${milestonePath}/review`, "POST", { decision: "confirm", expectedVersion: confirmed.version });
+  assert.equal((await call(`/api/teams/${team.team.id}`)).team.points, 10);
+  assert.equal((await call(`${path}/milestones`)).total, 1);
+  await call(`${milestonePath}/submit`, "POST", { report: "Попытка повторной сдачи", expectedVersion: confirmed.version }, 409);
+
   await call(`/api/proposals/${first.proposal.id}/status`, "PATCH", { status: "rejected", decisionComment: "Уточнить план" });
   assert.equal((await call(`${path}/proposals?status=rejected`)).total, 1);
+  assert.equal((await call(`/api/teams/${team.team.id}`)).team.points, 10);
+  await call(milestoneUrl, "POST", milestoneInput, 409);
 
   // A zero-score published task must still accept a proposal.
   const low = await call("/api/tasks", "POST", { initialDescription, title: "Пока мало данных", confirmedFields: ["title"] }, 201);
@@ -125,8 +172,10 @@ try {
   await ready();
   assert.equal((await call(path)).task.status, "archived");
   assert.equal((await call(`${path}/proposals`)).total, 2);
+  assert.equal((await call(`${path}/milestones`)).milestones[0].status, "confirmed");
+  assert.equal((await call(`/api/teams/${team.team.id}`)).team.points, 10);
   assert.equal((await call("/api/health")).counts.tasks, 7);
-  console.log("PASS: production HTTP workflow, AI mock, scoring, catalogue, proposals, validation and restart persistence.");
+  console.log("PASS: production HTTP workflow, AI mock, scoring, catalogue, proposals, milestone review/points, readiness, validation and restart persistence.");
 } catch (error) {
   console.error(output);
   throw error;

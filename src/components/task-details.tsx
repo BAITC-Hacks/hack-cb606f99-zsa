@@ -21,15 +21,17 @@ import {
   EmptyState,
   getTaskTitle,
 } from "./ui";
+import { MilestonePanel } from "./milestones";
 
 export function TaskDetails({ id }: { id: string }) {
   const load = useCallback(async () => {
-    const [task, teams, proposals] = await Promise.all([
+    const [task, teams, proposals, milestones] = await Promise.all([
       taskService.getTask(id),
       taskService.listTeams(),
       taskService.listProposals(id),
+      taskService.supportsMilestones ? taskService.listMilestones(id) : Promise.resolve([]),
     ]);
-    return { task, teams, proposals };
+    return { task, teams, proposals, milestones };
   }, [id]);
   const { data, loading, error, refreshError, retry } = useResource(load);
   const [form, setForm] = useState<ProposalInput>(EMPTY_PROPOSAL);
@@ -69,7 +71,9 @@ export function TaskDetails({ id }: { id: string }) {
         </Link>
       </main>
     );
-  const { task, teams, proposals } = data;
+  const { task, teams, proposals, milestones } = data;
+  const selectedTeam = teams.find((team) => team.id === (form.teamId || teams[0]?.id));
+  const selectedProposals = proposals.filter((proposal) => proposal.teamId === selectedTeam?.id && proposal.status === "accepted");
   const published = task.status === "published";
   const keys: FieldKey[] = [
     "contextAndNeed",
@@ -317,6 +321,25 @@ export function TaskDetails({ id }: { id: string }) {
               </form>
             )}
           </div>
+          {taskService.supportsMilestones && (
+            <section className="panel form-panel" aria-label="Прогресс моей команды" style={{ marginTop: 24 }}>
+              <h2>Прогресс моей команды</h2>
+              <p className="small-text muted">Выберите ту же команду, от имени которой отправляли предложение. Это демонстрационный выбор роли, не авторизация.</p>
+              <label className="form-field">Команда для просмотра этапов
+                <Select value={selectedTeam?.id ?? ""} onChange={(event) => update("teamId", event.target.value)}>
+                  {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+                </Select>
+              </label>
+              <p>Баллы команды: <strong>{selectedTeam?.points ?? 0}</strong></p>
+              {!selectedProposals.length && <p className="small-text muted">Этапы появятся после выбора вашего предложения бизнесом.</p>}
+              {selectedProposals.map((proposal) => (
+                <div key={proposal.id}>
+                  <p className="small-text muted">Предложение: {proposal.solutionIdea}</p>
+                  <MilestonePanel taskId={id} proposalId={proposal.id} milestones={milestones} mode="team" disabled={!published} onChanged={retry} />
+                </div>
+              ))}
+            </section>
+          )}
         </div>
         <div className="detail-aside">
           <ScorePanel

@@ -5,7 +5,7 @@ import {
 import { AppError } from "../errors";
 import { MockAiProvider } from "./mock";
 import { AiOutputError, safeAiDiagnostic } from "./errors";
-import { sourceQuote } from "./grounding";
+import { explicitConstraintQuote, explicitDataAbsenceQuote, sourceQuote } from "./grounding";
 import { explicitResultQuote } from "./result-quote";
 import { relevantQuestions } from "./questions";
 import { FIELD_LABELS } from "./fields";
@@ -16,15 +16,17 @@ const CandidateAnalysisSchema = AnalysisSchema.extend({ questions: z.array(Clari
 
 function validateCard(input: CardInput, result: unknown): { card: TaskCardFields; rejectedFields: TaskField[] } {
   const card = TaskCardFieldsSchema.parse(result);
-  const sources = [input.initialDescription, ...Object.values(input.fields ?? {}), ...input.answers.map((answer) => answer.answer)];
+  // A manual value is authoritative only for its own field. Do not let the model
+  // reuse an unrelated answer as evidence for a different inferred fact.
+  const explicit = new Set<TaskField>(["initialDescription", ...Object.keys(input.fields ?? {}) as TaskField[], ...input.answers.map((answer) => answer.field)]);
   // Explicit user edits and answers always win over model output.
   Object.assign(card, input.fields);
   for (const { field, answer } of input.answers) card[field] = answer;
   card.initialDescription = input.initialDescription;
   const rejectedFields: TaskField[] = [];
   for (const field of Object.keys(card) as TaskField[]) {
-    if (!card[field]) continue;
-    const quote = sourceQuote(card[field], sources);
+    if (!card[field] || explicit.has(field)) continue;
+    const quote = sourceQuote(card[field], [input.initialDescription], field);
     if (quote === undefined) rejectedFields.push(field);
     card[field] = quote ?? "";
   }
@@ -33,10 +35,27 @@ function validateCard(input: CardInput, result: unknown): { card: TaskCardFields
   // and never override a user edit (including an intentionally empty field).
   if (!card.expectedResult && input.fields?.expectedResult === undefined &&
       !input.answers.some((answer) => answer.field === "expectedResult")) {
-    const quote = explicitResultQuote(input.initialDescription);
+    const candidate = explicitResultQuote(input.initialDescription);
+    const quote = candidate ? sourceQuote(candidate, [input.initialDescription], "expectedResult") : undefined;
     if (quote) {
       card.expectedResult = quote;
       const rejectedIndex = rejectedFields.indexOf("expectedResult");
+      if (rejectedIndex !== -1) rejectedFields.splice(rejectedIndex, 1);
+    }
+  }
+  if (!card.dataAndMaterials && !explicit.has("dataAndMaterials")) {
+    const quote = explicitDataAbsenceQuote(input.initialDescription);
+    if (quote) {
+      card.dataAndMaterials = quote;
+      const rejectedIndex = rejectedFields.indexOf("dataAndMaterials");
+      if (rejectedIndex !== -1) rejectedFields.splice(rejectedIndex, 1);
+    }
+  }
+  if (!card.constraints && !explicit.has("constraints")) {
+    const quote = explicitConstraintQuote(input.initialDescription);
+    if (quote) {
+      card.constraints = quote;
+      const rejectedIndex = rejectedFields.indexOf("constraints");
       if (rejectedIndex !== -1) rejectedFields.splice(rejectedIndex, 1);
     }
   }
@@ -44,14 +63,22 @@ function validateCard(input: CardInput, result: unknown): { card: TaskCardFields
   // An explicitly cleared user field is still respected.
   if (!card.contextAndNeed && input.fields?.contextAndNeed === undefined &&
       !input.answers.some((answer) => answer.field === "contextAndNeed")) {
-    card.contextAndNeed = input.initialDescription.slice(0, 5000);
+    // Do not truncate a long sentence before a negation/correction at the limit.
+    card.contextAndNeed = input.initialDescription.length <= 5000 ? input.initialDescription : "";
   }
   if (!card.title && input.fields?.title === undefined && !input.answers.some((answer) => answer.field === "title")) {
     const source = card.expectedResult || card.contextAndNeed || input.initialDescription;
-    card.title = source.split(/[.!?](?:\s|$)/u)[0].slice(0, 200).trim();
-    if (!card.title) card.title = input.initialDescription.slice(0, 200);
+    const sentence = source.split(/[.!?](?:\s|$)/u)[0].trim();
+    // A shorter manual title is safer than truncating before a crucial qualifier.
+    card.title = sentence.length <= 200 ? sentence : "";
   }
   return { card: TaskCardFieldsSchema.parse(card), rejectedFields };
+}
+
+function addGroundingWarning(ai: AiMetadata, rejectedFields: TaskField[]) {
+  if (!rejectedFields.length) return;
+  const warning = `Предложения AI для полей ${rejectedFields.map((field) => FIELD_LABELS[field]).join(", ")} не подтверждены исходным текстом с учётом контекста или неоднозначны и не использованы. Уточните эти поля вручную.`;
+  ai.warning = ai.warning ? `${ai.warning} ${warning}` : warning;
 }
 
 export class AiService {
@@ -89,11 +116,12 @@ export class AiService {
           new Set(analysis.questions.map((question) => question.question.toLocaleLowerCase("ru"))).size !== analysis.questions.length) {
         throw new AiOutputError("DUPLICATE_QUESTIONS");
       }
-      const { card } = validateCard({ ...input, answers: [] }, generated.knownFields ?? emptyTaskFields(input.initialDescription));
+      const { card, rejectedFields } = validateCard({ ...input, answers: [] }, generated.knownFields ?? emptyTaskFields(input.initialDescription));
       const missingFields = TASK_FIELDS.filter((field) => !card[field]);
-      return AnalysisSchema.parse({ questions: relevantQuestions(analysis.questions, card, missingFields), missingFields });
+      return { analysis: AnalysisSchema.parse({ questions: relevantQuestions(card, missingFields), missingFields }), rejectedFields };
     });
-    return { ...result, ai };
+    addGroundingWarning(ai, result.rejectedFields);
+    return { ...result.analysis, ai };
   }
 
   async buildCard(value: unknown): Promise<BuildCardResponse> {
@@ -103,10 +131,7 @@ export class AiService {
     for (const { field, answer } of input.answers) supplied[field] = answer;
     TaskCardFieldsSchema.partial().parse(supplied);
     const { result, ai } = await this.run(async (provider) => validateCard(input, await provider.buildCard(input)));
-    if (result.rejectedFields.length) {
-      const warning = `Предложения для полей ${result.rejectedFields.map((field) => FIELD_LABELS[field]).join(", ")} не подтверждены исходным текстом и не использованы. Проверьте эти поля вручную.`;
-      ai.warning = ai.warning ? `${ai.warning} ${warning}` : warning;
-    }
+    addGroundingWarning(ai, result.rejectedFields);
     return { card: result.card, confirmedFields: [], ai };
   }
 }

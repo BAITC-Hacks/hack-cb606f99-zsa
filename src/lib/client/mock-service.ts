@@ -3,7 +3,10 @@ import type {
   TaskCard,
   Proposal,
 } from "@/shared/contracts";
-import { AnalyzeDraftRequestSchema, ProposalSchema } from "@/shared/contracts";
+import {
+  AnalyzeDraftRequestSchema, ProposalSchema, MILESTONE_POINTS,
+  CreateMilestoneRequestSchema, SubmitMilestoneRequestSchema, ReviewMilestoneRequestSchema,
+} from "@/shared/contracts";
 import {
   EMPTY_FIELDS,
   fieldsOnly,
@@ -14,6 +17,7 @@ import {
 } from "./model";
 import { seedTasks, seedProposals, SEED_TEAMS } from "./seeds";
 import { DemoDatabaseSchema } from "./schemas";
+import { ApiClientError } from "./api-error";
 
 export const DEMO_STORAGE_KEY = "ai-sana-demo-v1";
 type Database = {
@@ -22,6 +26,7 @@ type Database = {
   proposals: Proposal[];
   teams: Team[];
   milestones: Milestone[];
+  legacyMilestones: { proposalId: string; points: number; confirmedAt: string }[];
 };
 function read(): Database {
   const raw = localStorage.getItem(DEMO_STORAGE_KEY);
@@ -32,6 +37,7 @@ function read(): Database {
       proposals: seedProposals(),
       teams: structuredClone(SEED_TEAMS),
       milestones: [],
+      legacyMilestones: [],
     };
   try {
     return DemoDatabaseSchema.parse(JSON.parse(raw));
@@ -62,6 +68,20 @@ function findProposal(db: Database, id: string) {
   const proposal = db.proposals.find((item) => item.id === id);
   if (!proposal) throw new Error("Предложение не найдено.");
   return proposal;
+}
+function requireSelectedProposal(db: Database, proposalId: string) {
+  const proposal = findProposal(db, proposalId);
+  if (findTask(db, proposal.taskId).status !== "published") throw new ApiClientError("TASK_NOT_PUBLISHED", "Этапы доступны только для опубликованной задачи.");
+  if (proposal.status !== "accepted") throw new ApiClientError("PROPOSAL_NOT_ACCEPTED", "Сначала выберите команду.");
+  return proposal;
+}
+function findMilestone(db: Database, id: string) {
+  const milestone = db.milestones.find((item) => item.id === id);
+  if (!milestone) throw new Error("Этап не найден.");
+  return milestone;
+}
+function checkMilestoneVersion(milestone: Milestone, version: number) {
+  if (milestone.version !== version) throw new ApiClientError("VERSION_CONFLICT", "Этап уже изменён. Обновите его перед повторным действием.");
 }
 export const mockService: TaskService = {
   supportsMilestones: true,
@@ -184,15 +204,17 @@ export const mockService: TaskService = {
       );
     const db = read();
     const previous = id ? findTask(db, id) : undefined;
-    if (previous?.status === "archived") throw new Error("Задача в архиве и доступна только для чтения.");
+    if (previous?.status === "archived") throw new ApiClientError("TASK_ARCHIVED", "Задача в архиве и доступна только для чтения.");
     if (previous && expectedVersion !== undefined && previous.version !== expectedVersion)
-      throw new Error("Карточка изменилась. Загрузите актуальную версию.");
+      throw new ApiClientError("VERSION_CONFLICT", "Карточка изменилась. Загрузите актуальную версию.");
     const cleaned = Object.fromEntries(
       Object.entries(fieldsOnly(fields)).map(([key, value]) => [
         key,
         value.trim(),
       ]),
     ) as typeof fields;
+    if (previous?.status === "published" && !cleaned.title)
+      throw new ApiClientError("TITLE_REQUIRED", "У опубликованной задачи должно быть название.");
     // The editor clears confirmation on edit; an explicit re-confirmation applies to the new value.
     const confirmed = [...new Set(confirmedFields)].filter(
       (key) => cleaned[key],
@@ -216,11 +238,11 @@ export const mockService: TaskService = {
     await delay();
     const db = read();
     const task = findTask(db, id);
-    if (task.status === "archived") throw new Error("Задача в архиве и доступна только для чтения.");
+    if (task.status === "archived") throw new ApiClientError("TASK_ARCHIVED", "Задача в архиве и доступна только для чтения.");
     if (expectedVersion !== undefined && task.version !== expectedVersion)
-      throw new Error("Карточка изменилась. Загрузите актуальную версию.");
+      throw new ApiClientError("VERSION_CONFLICT", "Карточка изменилась. Загрузите актуальную версию.");
     if (!task.title || !task.confirmedFields.includes("title"))
-      throw new Error("Заполните и подтвердите название перед публикацией.");
+      throw new ApiClientError("REVIEW_REQUIRED", "Заполните и подтвердите название перед публикацией.");
     if (task.status === "published") return task;
     task.status = "published";
     task.updatedAt = timestamp();
@@ -234,7 +256,7 @@ export const mockService: TaskService = {
     const db = read();
     const task = findTask(db, id);
     if (expectedVersion !== undefined && task.version !== expectedVersion)
-      throw new Error("Карточка изменилась. Загрузите актуальную версию.");
+      throw new ApiClientError("VERSION_CONFLICT", "Карточка изменилась. Загрузите актуальную версию.");
     if (task.status === "archived") return task;
     task.status = "archived";
     task.updatedAt = timestamp();
@@ -244,7 +266,10 @@ export const mockService: TaskService = {
   },
   async listTeams() {
     await delay();
-    return read().teams;
+    const db = read();
+    return db.teams.map((team) => ({ ...team, points: db.milestones
+      .filter((milestone) => milestone.teamId === team.id && milestone.status === "confirmed")
+      .reduce((sum, milestone) => sum + milestone.points, 0) }));
   },
   async listProposals(taskId) {
     await delay();
@@ -254,7 +279,7 @@ export const mockService: TaskService = {
     await delay();
     const db = read();
     if (findTask(db, taskId).status !== "published")
-      throw new Error("Откликнуться можно после публикации задачи.");
+      throw new ApiClientError("TASK_NOT_PUBLISHED", "Откликнуться можно после публикации задачи.");
     if (!db.teams.some((team) => team.id === input.teamId))
       throw new Error("Выберите команду.");
     const proposal: Proposal = {
@@ -283,7 +308,7 @@ export const mockService: TaskService = {
     const db = read();
     const proposal = findProposal(db, id);
     if (findTask(db, proposal.taskId).status !== "published")
-      throw new Error("Решения доступны только для опубликованной задачи.");
+      throw new ApiClientError("TASK_NOT_PUBLISHED", "Решения доступны только для опубликованной задачи.");
     proposal.status = status;
     proposal.decisionComment = decisionComment.trim();
     proposal.updatedAt = timestamp();
@@ -294,25 +319,46 @@ export const mockService: TaskService = {
   async listMilestones(taskId) {
     await delay();
     const db = read();
-    const ids = db.proposals
-      .filter((item) => item.taskId === taskId)
-      .map((item) => item.id);
-    return db.milestones.filter((item) => ids.includes(item.proposalId));
+    findTask(db, taskId);
+    return db.milestones.filter((item) => item.taskId === taskId);
   },
-  async confirmMilestone(proposalId) {
+  async createMilestone(proposalId, input) {
     await delay();
     const db = read();
-    const proposal = findProposal(db, proposalId);
-    if (proposal.status !== "accepted")
-      throw new Error("Сначала выберите команду.");
-    const previous = db.milestones.find(
-      (item) => item.proposalId === proposalId,
-    );
-    if (previous) return previous;
-    const milestone = { proposalId, points: 25, confirmedAt: timestamp() };
-    const team = db.teams.find((item) => item.id === proposal.teamId);
-    if (team) team.points = (team.points ?? 0) + milestone.points;
+    const proposal = requireSelectedProposal(db, proposalId);
+    const fields = CreateMilestoneRequestSchema.parse(input);
+    const now = timestamp();
+    const milestone: Milestone = {
+      ...fields, id: crypto.randomUUID(), proposalId, taskId: proposal.taskId, teamId: proposal.teamId,
+      points: MILESTONE_POINTS, status: "planned", report: "", evidenceUrl: "", reviewComment: "",
+      version: 1, createdAt: now, updatedAt: now, submittedAt: null, confirmedAt: null,
+    };
     db.milestones.push(milestone);
+    write(db);
+    return milestone;
+  },
+  async submitMilestone(id, input) {
+    await delay();
+    const request = SubmitMilestoneRequestSchema.parse(input);
+    const db = read();
+    const milestone = findMilestone(db, id);
+    requireSelectedProposal(db, milestone.proposalId);
+    checkMilestoneVersion(milestone, request.expectedVersion);
+    if (milestone.status !== "planned" && milestone.status !== "changes_requested") throw new ApiClientError("MILESTONE_STATE_CONFLICT", "Этот этап уже отправлен или подтверждён.");
+    Object.assign(milestone, { report: request.report, evidenceUrl: request.evidenceUrl ?? "", reviewComment: "", status: "submitted", version: milestone.version + 1, submittedAt: timestamp(), updatedAt: timestamp() });
+    write(db);
+    return milestone;
+  },
+  async reviewMilestone(id, input) {
+    await delay();
+    const request = ReviewMilestoneRequestSchema.parse(input);
+    const db = read();
+    const milestone = findMilestone(db, id);
+    requireSelectedProposal(db, milestone.proposalId);
+    if (milestone.status === "confirmed" && request.decision === "confirm") return milestone;
+    checkMilestoneVersion(milestone, request.expectedVersion);
+    if (milestone.status !== "submitted") throw new ApiClientError("MILESTONE_STATE_CONFLICT", "Сначала команда должна отправить отчёт по этапу.");
+    Object.assign(milestone, { status: request.decision === "confirm" ? "confirmed" : "changes_requested", reviewComment: request.comment ?? "", version: milestone.version + 1, updatedAt: timestamp(), confirmedAt: request.decision === "confirm" ? timestamp() : null });
     write(db);
     return milestone;
   },

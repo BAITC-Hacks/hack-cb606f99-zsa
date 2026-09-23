@@ -72,5 +72,5 @@ export function createSeed(): Database {
     decisionComment: index === 0 ? "Приглашаем обсудить прототип." : index === 1 ? "Нужно уточнить работу без карты." : "",
     createdAt: timestamp, updatedAt: timestamp, decidedAt: index < 2 ? timestamp : null,
   }));
-  return DatabaseSchema.parse({ schemaVersion: 1, tasks, teams, proposals });
+  return DatabaseSchema.parse({ schemaVersion: 1, tasks, teams, proposals, milestones: [] });
 }

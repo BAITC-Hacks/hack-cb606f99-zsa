@@ -5,6 +5,7 @@ import { taskService, ApiClientError } from "@/lib/client/service";
 import { useResource } from "@/lib/client/use-resource";
 import { errorMessage, safeLink } from "@/lib/client/model";
 import { Icon, Badge, LoadingState, ErrorNotice, EmptyState, getTaskTitle } from "./ui";
+import { MilestonePanel } from "./milestones";
 
 const labels = {
   pending: "На рассмотрении",
@@ -28,7 +29,6 @@ export function Proposals({ id }: { id: string }) {
   const [busy, setBusy] = useState("");
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
-  const [confirming, setConfirming] = useState("");
   const guard = useRef(false);
   async function act(
     key: string,
@@ -51,7 +51,6 @@ export function Proposals({ id }: { id: string }) {
     } finally {
       guard.current = false;
       setBusy("");
-      setConfirming("");
     }
   }
   if (loading)
@@ -135,13 +134,10 @@ export function Proposals({ id }: { id: string }) {
       ) : refreshing ? (
         <LoadingState label="Обновляем отклики…" />
       ) : null}
-      <div className="proposal-list content-enter" key={filter}>
+      <div className="proposal-list content-enter">
         {filtered.length ? (
           filtered.map((proposal) => {
             const team = teams.find((item) => item.id === proposal.teamId);
-            const milestone = milestones.find(
-              (item) => item.proposalId === proposal.id,
-            );
             return (
               <article
                 className={`panel proposal-card ${proposal.status}`}
@@ -287,50 +283,13 @@ export function Proposals({ id }: { id: string }) {
                           ? "Отклонить предложение"
                           : "Выбрать команду"}
                       </button>
-                      {taskService.supportsMilestones &&
-                        proposal.status === "accepted" &&
-                        (milestone ? (
-                          <span className="milestone-done">
-                            <Icon name="check" size={15} />
-                            Этап подтверждён: +{milestone.points} баллов
-                          </span>
-                        ) : confirming === proposal.id ? (
-                          <div className="milestone-confirm">
-                            <span>Прототип проверен бизнесом?</span>
-                            <button
-                              className="btn btn-blue btn-small"
-                              disabled={!!busy}
-                              onClick={() =>
-                                void act(
-                                  proposal.id,
-                                  () =>
-                                    taskService.confirmMilestone(proposal.id),
-                                  "Прогресс подтверждён. Команде начислено 25 баллов.",
-                                )
-                              }
-                            >
-                              Да, подтвердить
-                            </button>
-                            <button
-                              className="btn btn-ghost btn-small"
-                              disabled={!!busy}
-                              onClick={() => setConfirming("")}
-                            >
-                              Отмена
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            className="btn btn-secondary btn-small"
-                            disabled={!!busy}
-                            onClick={() => setConfirming(proposal.id)}
-                          >
-                            Подтвердить этап (+25 баллов)
-                          </button>
-                        ))}
                     </>
                   )}
                 </fieldset>
+                {taskService.supportsMilestones && (proposal.status === "accepted" || milestones.some((item) => item.proposalId === proposal.id)) && (
+                  <MilestonePanel taskId={id} proposalId={proposal.id} milestones={milestones} mode="business"
+                    disabled={!!busy || task.status !== "published" || proposal.status !== "accepted"} onChanged={retry} />
+                )}
               </article>
             );
           })

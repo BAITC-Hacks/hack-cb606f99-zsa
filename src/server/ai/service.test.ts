@@ -3,6 +3,7 @@ import { AnalyzeDraftResponseSchema, BuildCardResponseSchema, TaskCardFieldsSche
 import { MockAiProvider } from "./mock";
 import { AiService } from "./service";
 import { createSeed } from "../repositories/seed";
+import type { AiProvider } from "./provider";
 
 const input = { initialDescription: "Пекарня хочет сократить ежедневные списания продукции" };
 
@@ -124,5 +125,98 @@ describe("AI pipeline", () => {
     const result = await new AiService(provider, "openai", false).buildCard({ initialDescription: description });
     expect(result.card.expectedResult).toBe("");
     expect(result.card.constraints).toBe("");
+  });
+  it.each([
+    ["Нам не нужен каталог. Выбранный результат ещё обсуждается.", "expectedResult", "нужен каталог", ""],
+    ["Нужен каталог. Позже от этой идеи отказались.", "expectedResult", "Нужен каталог", ""],
+    ["Есть CSV? Нет, данные ещё не собраны.", "dataAndMaterials", "Есть CSV", "Нет, данные ещё не собраны."],
+    ["Есть CSV. CSV нет.", "dataAndMaterials", "Есть CSV. CSV нет.", ""],
+    ["Срок 2 недели. Новый срок 4 недели.", "constraints", "Срок 2 недели", ""],
+  ] as const)("does not publish unsafe model facts from %s", async (description, field, suggestion, expected) => {
+    const upstream = new MockAiProvider();
+    vi.spyOn(upstream, "buildCard").mockResolvedValue({ ...emptyTaskFields(description), [field]: suggestion });
+    const result = await new AiService(upstream, "openai", false).buildCard({ initialDescription: description });
+    expect(result.card[field]).toBe(expected);
+    if (!expected) expect(result.ai.warning).toContain("неоднозначны");
+    expect(result.confirmedFields).toEqual([]);
+  });
+  it("retains field-specific explicit answers and clearing despite contradictory source text", async () => {
+    const description = "Нам не нужен каталог. CSV нет. Срок 2 недели.";
+    const upstream = new MockAiProvider();
+    vi.spyOn(upstream, "buildCard").mockResolvedValue({ ...emptyTaskFields(description), expectedResult: "нужен каталог" });
+    const ai = new AiService(upstream, "openai", false);
+    const result = await ai.buildCard({ initialDescription: description, fields: { expectedResult: "", constraints: "Срок 4 недели" }, answers: [
+      { field: "dataAndMaterials", answer: "Теперь есть CSV за 6 месяцев." },
+      { field: "constraints", answer: "Последнее решение: срок 5 недель." },
+    ] });
+    expect(result.card.expectedResult).toBe("");
+    expect(result.card.dataAndMaterials).toBe("Теперь есть CSV за 6 месяцев.");
+    expect(result.card.constraints).toBe("Последнее решение: срок 5 недель.");
+    expect(result.ai.warning).toBeNull();
+  });
+  it("does not reuse an unrelated manual answer as evidence for another field", async () => {
+    const upstream = new MockAiProvider();
+    vi.spyOn(upstream, "buildCard").mockResolvedValue({ ...emptyTaskFields(input.initialDescription), expectedResult: "owner@example.com" });
+    const result = await new AiService(upstream, "openai", false).buildCard({ ...input, answers: [{ field: "businessContact", answer: "owner@example.com" }] });
+    expect(result.card.businessContact).toBe("owner@example.com");
+    expect(result.card.expectedResult).toBe("");
+  });
+  it("does not truncate a long source into a misleading context statement", async () => {
+    const description = `${"Контекст ".repeat(650)}. Данных нет.`;
+    const upstream = new MockAiProvider();
+    vi.spyOn(upstream, "buildCard").mockResolvedValue(emptyTaskFields(description));
+    const result = await new AiService(upstream, "openai", false).buildCard({ initialDescription: description });
+    expect(result.card.initialDescription).toBe(description);
+    expect(result.card.contextAndNeed).toBe("");
+    expect(result.card.title).toBe("");
+  });
+  it("keeps absence of data when the model omits it or shortens it into an ungrounded paraphrase", async () => {
+    const description = "Пекарня теряет деньги на списаниях. Мы не хотим панель и не планируем создавать каталог. Формат результата ещё не выбран. Данных пока нет.";
+    for (const dataAndMaterials of ["", "Данных нет"]) {
+      const upstream = new MockAiProvider();
+      vi.spyOn(upstream, "buildCard").mockResolvedValue({ ...emptyTaskFields(description), dataAndMaterials });
+      const ai = new AiService(upstream, "openai", false);
+      expect((await ai.buildCard({ initialDescription: description })).card.dataAndMaterials).toBe("Данных пока нет.");
+      expect((await ai.buildCard({ initialDescription: description, fields: { dataAndMaterials: "" } })).card.dataAndMaterials).toBe("");
+    }
+  });
+  it("rejects the business-goal response seen in the live question-is-not-data regression", async () => {
+    const description = "Есть CSV? Ответ: данных нет. Нам не нужен каталог. Итоговый формат ещё обсуждается. Нужно сократить время обработки заявок.";
+    const upstream: AiProvider = new MockAiProvider();
+    const card = { ...emptyTaskFields(description), expectedResult: "сократить время обработки заявок", dataAndMaterials: "данных нет" };
+    vi.spyOn(upstream, "buildCard").mockResolvedValue(card);
+    vi.spyOn(upstream, "analyze").mockResolvedValue({ knownFields: card, questions: [], missingFields: [] });
+    const ai = new AiService(upstream, "openai", false);
+    const result = await ai.buildCard({ initialDescription: description });
+    expect(result.card.expectedResult).toBe("");
+    expect(result.card.dataAndMaterials).toContain("нет");
+    const analysis = await ai.analyze({ initialDescription: description });
+    expect(analysis.missingFields).toContain("expectedResult");
+    expect(analysis.questions.some((question) => question.field === "expectedResult")).toBe(true);
+  });
+  it("recovers the original English deliverable while rejecting conditional data and translated guesses", async () => {
+    const description = "Customers call to ask about repair progress. We need a status page. If access is granted, CSV is available. Access approval is still pending.";
+    const upstream: AiProvider = new MockAiProvider();
+    const card = { ...emptyTaskFields(description), expectedResult: "Страница статуса", dataAndMaterials: "CSV is available" };
+    vi.spyOn(upstream, "buildCard").mockResolvedValue(card);
+    vi.spyOn(upstream, "analyze").mockResolvedValue({ knownFields: card, questions: [], missingFields: [] });
+    const ai = new AiService(upstream, "openai", false);
+    const result = await ai.buildCard({ initialDescription: description });
+    expect(result.card.expectedResult).toBe("We need a status page.");
+    expect(result.card.dataAndMaterials).toBe("");
+    const analysis = await ai.analyze({ initialDescription: description });
+    expect(analysis.missingFields).not.toContain("expectedResult");
+    expect(analysis.missingFields).toContain("dataAndMaterials");
+  });
+  it("recovers an omitted labelled deadline in cards and analysis while respecting manual overrides", async () => {
+    const description = "Нужна веб-страница статуса ремонта. Есть CSV заказов. Срок — 2 недели. Встречи по пятницам, обратная связь за 2 дня.";
+    const upstream: AiProvider = new MockAiProvider();
+    vi.spyOn(upstream, "buildCard").mockResolvedValue(emptyTaskFields(description));
+    vi.spyOn(upstream, "analyze").mockResolvedValue({ knownFields: emptyTaskFields(description), questions: [], missingFields: [] });
+    const ai = new AiService(upstream, "openai", false);
+    expect((await ai.buildCard({ initialDescription: description })).card.constraints).toBe("Срок — 2 недели.");
+    expect((await ai.analyze({ initialDescription: description })).missingFields).not.toContain("constraints");
+    expect((await ai.buildCard({ initialDescription: description, fields: { constraints: "" } })).card.constraints).toBe("");
+    expect((await ai.buildCard({ initialDescription: description, answers: [{ field: "constraints", answer: "Новый согласованный срок — 5 недель." }] })).card.constraints).toBe("Новый согласованный срок — 5 недель.");
   });
 });
